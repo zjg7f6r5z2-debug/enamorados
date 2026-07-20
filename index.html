@@ -118,6 +118,11 @@ main{max-width:1080px;margin:0 auto;padding:14px 14px 90px}
   #printArea table{width:100%;border-collapse:collapse}
   #printArea th,#printArea td{border:1px solid #999;padding:4px 6px;text-align:left;color:#000}
 }
+/* Hero + gráficos */
+.hero{background:linear-gradient(150deg,rgba(182,146,246,.14),rgba(255,107,138,.08)),var(--panel);border-color:#3d3160}
+.hero-v{font-size:34px;font-weight:900;letter-spacing:-.02em;margin-top:2px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:99px;margin-right:6px;vertical-align:middle}
+svg text{font-family:inherit}
 /* Mobile: evita layout estourado e nav bugada */
 @media(max-width:560px){
   #topbar{gap:8px;padding:9px 12px}
@@ -128,6 +133,7 @@ main{max-width:1080px;margin:0 auto;padding:14px 14px 90px}
   .grid2,.grid3{grid-template-columns:1fr}
   h2{font-size:20px}
   #totalBig{font-size:22px}
+  .hero-v{font-size:30px}
   .kpi .v{font-size:18px}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -591,33 +597,109 @@ function aggregate(D){
   return { ok, total, n:ok.length, ticket: ok.length? total/ok.length:0, by, perOp, perProd, cmv, totalSang, compras, despesas, pname };
 }
 
+/* ---------- GRÁFICOS (SVG puro) ---------- */
+const CHART = ["#B692F6","#FF6B8A","#5FE0A8","#8B7BF0","#F5B14C"]; // lilás, rosa, verde, índigo, âmbar
+function donut(segs, centerTop, centerBot){
+  const tot = segs.reduce((s,x)=>s+x.value,0);
+  const R=52, C=2*Math.PI*R, sw=16; let off=0;
+  const arcs = tot>0 ? segs.filter(s=>s.value>0).map(s=>{
+    const frac=s.value/tot, len=frac*C;
+    const el=`<circle cx="70" cy="70" r="${R}" fill="none" stroke="${s.color}" stroke-width="${sw}"
+      stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-off}" transform="rotate(-90 70 70)" stroke-linecap="butt"/>`;
+    off+=len; return el;
+  }).join("") : `<circle cx="70" cy="70" r="${R}" fill="none" stroke="var(--line)" stroke-width="${sw}"/>`;
+  return `<svg viewBox="0 0 140 140" width="140" height="140" style="flex:0 0 auto">${arcs}
+    <text x="70" y="66" text-anchor="middle" fill="var(--txt)" font-size="16" font-weight="800">${centerTop}</text>
+    <text x="70" y="84" text-anchor="middle" fill="var(--mut)" font-size="10" letter-spacing=".05em">${centerBot}</text></svg>`;
+}
+function hbars(items){ // [{label,value,sub,color?}]
+  const max = Math.max(1, ...items.map(i=>i.value));
+  return items.map((it,idx)=>`<div style="margin:9px 0">
+    <div class="row" style="margin-bottom:4px"><span class="small">${esc(it.label)}</span><b class="right num small">${esc(it.sub)}</b></div>
+    <div style="height:9px;background:var(--panel2);border-radius:99px;overflow:hidden">
+      <div style="height:100%;width:${(it.value/max*100).toFixed(1)}%;background:${it.color||CHART[idx%CHART.length]};border-radius:99px"></div></div>
+  </div>`).join("");
+}
+function compbar(segs){ // barra de composição empilhada
+  const tot=segs.reduce((s,x)=>s+x.value,0)||1;
+  return `<div style="display:flex;height:12px;border-radius:99px;overflow:hidden;background:var(--panel2)">
+    ${segs.filter(s=>s.value>0).map(s=>`<div style="width:${(s.value/tot*100).toFixed(1)}%;background:${s.color}"></div>`).join("")}</div>`;
+}
+
 /* ---------- PAINEL ADMIN ---------- */
 async function renderPainel(){
   const el=$("view-painel");
-  if(!EVENT){ el.innerHTML=`<div class="card"><h2>Nenhum evento aberto</h2><p class="mut">Crie um evento na aba Evento.</p></div>`; return; }
+  if(!EVENT){ el.innerHTML=`<div class="card"><h2>Nenhum evento ativo</h2><p class="mut">O evento é criado automaticamente no primeiro acesso do Admin.</p></div>`; return; }
   const D = await eventData(EVENT.id); const A = aggregate(D);
   const openRegs = D.regs.filter(r=>r.status==="aberto");
   const diverg = D.regs.filter(r=>r.status==="fechado" && Math.abs(Number(r.difference))>=0.005);
   const lowStock = D.prods.filter(p=>p.active && p.stock<=p.min_stock);
   const rankFat = Object.values(A.perOp).sort((a,b)=>b.total-a.total);
-  const rankQtd = [...rankFat].sort((a,b)=>b.n-a.n);
-  const topProd = Object.values(A.perProd).sort((a,b)=>b.qty-a.qty).slice(0,8);
+  const topProd = Object.values(A.perProd).sort((a,b)=>b.total-a.total).slice(0,6);
+  const saidas = A.despesas + A.compras;
+  const lucro = A.total - A.cmv - A.despesas;
+  const payLegend = METHODS.map(([k,l],i)=>({label:l,value:A.by[k],color:CHART[i]}));
+
   el.innerHTML = `
-    <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Painel — ${esc(EVENT.name)}</h2>
-      <span class="mut small right">atualiza a cada 10s</span></div>
+    <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Painel</h2>
+      <span class="mut small right">● ao vivo · 10s</span></div>
+
+    <!-- HERO: total arrecadado + composição -->
+    <div class="card hero">
+      <div class="l" style="text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--mut)">Total arrecadado</div>
+      <div class="hero-v num">${fmt(A.total)}</div>
+      <div style="margin:12px 0 8px">${compbar(payLegend)}</div>
+      <div class="row" style="gap:12px 16px">
+        ${payLegend.filter(s=>s.value>0).map(s=>`<span class="small"><span class="dot" style="background:${s.color}"></span>${s.label} <b class="num">${fmt(s.value)}</b></span>`).join("") || '<span class="mut small">Sem vendas ainda</span>'}
+      </div>
+    </div>
+
+    <!-- KPIs -->
     <div class="kpis">
-      <div class="kpi"><div class="v num">${fmt(A.total)}</div><div class="l">Total arrecadado</div></div>
       <div class="kpi"><div class="v num">${A.n}</div><div class="l">Vendas</div></div>
       <div class="kpi"><div class="v num">${fmt(A.ticket)}</div><div class="l">Ticket médio</div></div>
       <div class="kpi"><div class="v num">${openRegs.length}</div><div class="l">Caixas abertos</div></div>
+      <div class="kpi"><div class="v num" style="color:${lucro>=0?'var(--ok)':'var(--bad)'}">${fmt(lucro)}</div><div class="l">Lucro estimado</div></div>
     </div>
-    <div class="card"><h3>Por forma de pagamento</h3>
-      ${METHODS.map(([k,l])=>`<div class="row" style="padding:4px 0"><span>${l}</span><b class="right num">${fmt(A.by[k])}</b></div>`).join("")}</div>
+
     ${(diverg.length||lowStock.length)?`<div class="card"><h3>Alertas</h3>
       ${diverg.map(r=>`<div class="alertline bad">⚠️ Divergência de caixa — ${esc(A.pname(r.operator_id))}: ${Number(r.difference)>0?'sobra':'falta'} de ${fmt(Math.abs(r.difference))}</div>`).join("")}
       ${lowStock.map(p=>`<div class="alertline amber">📦 Estoque baixo — ${esc(p.name)}: ${p.stock} un (mín. ${p.min_stock})</div>`).join("")}
     </div>`:""}
-    <div class="card"><h3>Caixas / operadores conectados</h3><div class="tbl-wrap"><table>
+
+    <div class="grid2">
+      <!-- Donut formas de pagamento -->
+      <div class="card"><h3>Formas de pagamento</h3>
+        <div class="row" style="gap:14px;align-items:center">
+          ${donut(payLegend, A.n+"", "vendas")}
+          <div style="flex:1;min-width:120px">
+            ${payLegend.map(s=>`<div class="row" style="padding:3px 0"><span class="small"><span class="dot" style="background:${s.color}"></span>${s.label}</span><b class="right num small">${fmt(s.value)}</b></div>`).join("")}
+          </div>
+        </div>
+      </div>
+      <!-- Resultado -->
+      <div class="card"><h3>Resultado do evento</h3>
+        <div class="row" style="padding:5px 0"><span>Entradas</span><b class="right num" style="color:var(--ok)">${fmt(A.total)}</b></div>
+        <div class="row" style="padding:5px 0"><span>Custo mercadoria</span><b class="right num">${fmt(A.cmv)}</b></div>
+        <div class="row" style="padding:5px 0"><span>Despesas + compras</span><b class="right num" style="color:var(--bad)">${fmt(saidas)}</b></div>
+        <div class="row" style="padding:5px 0"><span>Sangrias</span><b class="right num">${fmt(A.totalSang)}</b></div>
+        <hr>
+        <div class="row" style="padding:2px 0"><b>Lucro estimado</b><b class="right num" style="color:${lucro>=0?'var(--ok)':'var(--bad)'};font-size:18px">${fmt(lucro)}</b></div>
+      </div>
+    </div>
+
+    <!-- Produtos mais vendidos (barras) -->
+    <div class="card"><h3>Produtos mais vendidos</h3>
+      ${topProd.length ? hbars(topProd.map(p=>({label:p.name,value:p.total,sub:`${p.qty} un · ${fmt(p.total)}`}))) : '<p class="mut small">Nenhuma venda ainda.</p>'}
+    </div>
+
+    <!-- Ranking operadores (barras) -->
+    <div class="card"><h3>Ranking de operadores</h3>
+      ${rankFat.length ? hbars(rankFat.map((o,i)=>({label:`${i+1}º ${o.name}`,value:o.total,sub:`${o.n} vendas · ${fmt(o.total)}`,color:CHART[0]}))) : '<p class="mut small">—</p>'}
+    </div>
+
+    <!-- Caixas -->
+    <div class="card"><h3>Caixas / operadores</h3><div class="tbl-wrap"><table>
       <tr><th>Operador</th><th>Status</th><th>Vendas</th><th>Vendido</th><th></th></tr>
       ${D.regs.sort((a,b)=>a.status.localeCompare(b.status)).map(r=>{ const o=A.perOp[r.operator_id]||{n:0,total:0};
         return `<tr><td>${esc(A.pname(r.operator_id))}</td>
@@ -625,13 +707,10 @@ async function renderPainel(){
         <td class="num">${o.n}</td><td class="num">${fmt(o.total)}</td>
         <td>${r.status==="fechado"?`<button class="btn small" onclick="reabrirCaixa('${r.id}')">Reabrir</button>`:""}</td></tr>`; }).join("") || `<tr><td colspan="5" class="mut">Nenhum caixa aberto ainda.</td></tr>`}
     </table></div></div>
-    <div class="grid2">
-      <div class="card"><h3>Ranking por faturamento</h3>${rankFat.map((o,i)=>`<div class="row" style="padding:4px 0"><span>${i+1}º ${esc(o.name)}</span><b class="right num">${fmt(o.total)}</b></div>`).join("")||'<p class="mut small">—</p>'}</div>
-      <div class="card"><h3>Ranking por nº de vendas</h3>${rankQtd.map((o,i)=>`<div class="row" style="padding:4px 0"><span>${i+1}º ${esc(o.name)}</span><b class="right num">${o.n}</b></div>`).join("")||'<p class="mut small">—</p>'}</div>
-    </div>
-    <div class="grid2">
-      <div class="card"><h3>Produtos mais vendidos</h3>${topProd.map(p=>`<div class="row" style="padding:4px 0"><span>${esc(p.name)}</span><b class="right num">${p.qty} un · ${fmt(p.total)}</b></div>`).join("")||'<p class="mut small">—</p>'}</div>
-      <div class="card"><h3>Estoque em tempo real</h3>${D.prods.map(p=>`<div class="row" style="padding:4px 0"><span>${esc(p.name)}</span><b class="right num" style="color:${p.stock<=p.min_stock?'var(--bad)':'inherit'}">${p.stock} un</b></div>`).join("")||'<p class="mut small">—</p>'}</div>
+
+    <!-- Estoque -->
+    <div class="card"><h3>Estoque em tempo real</h3>
+      ${D.prods.length ? D.prods.map(p=>`<div class="row" style="padding:5px 0;border-bottom:1px dashed var(--line)"><span>${esc(p.name)}</span><b class="right num" style="color:${p.stock<=p.min_stock?'var(--bad)':'inherit'}">${p.stock} un</b></div>`).join("") : '<p class="mut small">Nenhum produto cadastrado.</p>'}
     </div>`;
 }
 async function reabrirCaixa(rid){
