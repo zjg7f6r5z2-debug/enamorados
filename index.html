@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
+<title>Financeiro — Encontro de Namorados</title>
+<meta name="theme-color" content="#14101E">
+<style>
+:root{
+  --bg:#14101E; --panel:#1E1830; --panel2:#271F3D; --line:#342A4E;
+  --txt:#F1ECFA; --mut:#A99FC4; --brand:#B692F6; --brand-dk:#2A1B45;
+  --ok:#5FE0A8; --bad:#FF6B8A; --info:#9D8DF1; --r:14px;
+}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+  font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+input,select,textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;
+  padding:11px 12px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--brand)}
+label{display:block;font-size:12px;color:var(--mut);margin:10px 0 4px;text-transform:uppercase;letter-spacing:.06em}
+h1,h2,h3{margin:0 0 8px;letter-spacing:-.01em}
+.num{font-variant-numeric:tabular-nums}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:12px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line);
+  background:var(--panel2);border-radius:12px;padding:12px 16px;cursor:pointer;font-weight:600;min-height:46px}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:linear-gradient(145deg,#C4ACF9,#A585F0);border-color:#A585F0;color:#241541;font-weight:700}
+.btn.danger{background:transparent;border-color:var(--bad);color:var(--bad)}
+.btn.ok{background:var(--ok);border-color:var(--ok);color:#04150C}
+.btn.ghost{background:transparent}
+.btn.small{padding:7px 11px;min-height:34px;font-size:13px;border-radius:9px}
+.btn.block{width:100%}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px;overflow:hidden}
+.kpi .v{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.kpi .l{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.07em;margin-top:2px}
+.kpi.warn .v{color:var(--bad)}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px;border:1px solid var(--line)}
+.tag.ok{color:var(--ok);border-color:var(--ok)}
+.tag.bad{color:var(--bad);border-color:var(--bad)}
+.tag.amber{color:var(--brand);border-color:var(--brand)}
+.mut{color:var(--mut)} .small{font-size:12.5px}
+.right{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.06em;text-align:left;padding:8px 8px;border-bottom:1px solid var(--line)}
+td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.tbl-wrap{overflow-x:auto}
+hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+/* Shell */
+#topbar{position:sticky;top:0;z-index:20;background:rgba(20,16,30,.92);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);padding:10px 14px;display:flex;align-items:center;gap:10px}
+.brand{font-weight:800;letter-spacing:.02em}
+.brand b{color:var(--brand)}
+#nav{position:sticky;top:49px;z-index:19;display:flex;gap:6px;overflow-x:auto;padding:8px 12px;
+  background:var(--bg);border-bottom:1px solid var(--line);scrollbar-width:none}
+#nav::-webkit-scrollbar{display:none}
+.navbtn{white-space:nowrap;border:1px solid var(--line);background:transparent;color:var(--mut);
+  border-radius:99px;padding:8px 14px;cursor:pointer;font-weight:600;font-size:13.5px}
+.navbtn.on{background:var(--brand);border-color:var(--brand);color:var(--brand-dk)}
+main{max-width:1080px;margin:0 auto;padding:14px 14px 90px}
+.view{display:none}.view.on{display:block}
+/* Auth */
+#authView{max-width:400px;margin:8vh auto;padding:0 16px}
+.lockup{text-align:center;margin-bottom:20px}
+.lockup .mark{width:52px;height:52px;border-radius:15px;background:linear-gradient(145deg,#C9B3FA,#9B7BEF);color:#fff;
+  display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:26px;margin-bottom:10px;
+  box-shadow:0 6px 20px rgba(155,123,239,.35)}
+.lockup .word{font-weight:800;letter-spacing:.16em;font-size:14px;text-transform:uppercase;line-height:1.5}
+.lockup .stroke{width:34px;height:3px;background:var(--brand);border-radius:2px;margin:8px auto 0}
+/* PDV */
+#pdvGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.pbtn{border:1px solid var(--line);background:var(--panel);border-radius:var(--r);padding:14px 12px;
+  cursor:pointer;text-align:left;min-height:88px;display:flex;flex-direction:column;justify-content:space-between}
+.pbtn:active{transform:scale(.97);border-color:var(--brand)}
+.pbtn .pn{font-weight:700;line-height:1.25}
+.pbtn .pp{color:var(--brand);font-weight:800;margin-top:6px}
+.pbtn .ps{font-size:11px;color:var(--mut)}
+.pbtn.low .ps{color:var(--bad)}
+.pbtn.out{opacity:.4;pointer-events:none}
+#cartBar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--panel);
+  border-top:1px solid var(--line);padding:10px 14px calc(10px + env(safe-area-inset-bottom))}
+#cartBar .inner{max-width:1080px;margin:0 auto}
+.payrow{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:8px 0}
+.paybtn{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 4px;cursor:pointer;
+  font-size:12px;font-weight:700;text-align:center}
+.paybtn.on{background:var(--brand);border-color:var(--brand);color:var(--brand-dk)}
+.cartline{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.qbtn{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);cursor:pointer;font-weight:800}
+#totalBig{font-size:26px;font-weight:900;letter-spacing:-.02em}
+/* Modal */
+#modalWrap{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center}
+#modalWrap.on{display:flex}
+#modalBox{background:var(--panel);border:1px solid var(--line);border-radius:18px 18px 0 0;width:100%;max-width:560px;
+  max-height:88vh;overflow-y:auto;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+@media(min-width:640px){#modalWrap{align-items:center}#modalBox{border-radius:18px}}
+.diffbad{background:rgba(255,77,94,.12);border:1px solid var(--bad);border-radius:10px;padding:10px;color:var(--bad);font-weight:800}
+.diffok{background:rgba(47,209,128,.1);border:1px solid var(--ok);border-radius:10px;padding:10px;color:var(--ok);font-weight:800}
+/* Toast / offline */
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:110px;z-index:60;background:var(--panel2);
+  border:1px solid var(--line);border-radius:12px;padding:11px 16px;font-weight:600;display:none;max-width:90vw}
+#offlineBar{display:none;background:var(--bad);color:#fff;text-align:center;font-size:12.5px;font-weight:700;padding:5px}
+#offlineBar.on{display:block}
+.alertline{display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;font-size:13.5px}
+.alertline.bad{border-color:var(--bad)}
+.alertline.amber{border-color:var(--brand)}
+/* Print */
+#printArea{display:none}
+@media print{
+  body>*{display:none!important}
+  #printArea{display:block!important;color:#000;background:#fff;font-size:12px}
+  #printArea h1{font-size:18px} #printArea h2{font-size:14px;margin-top:14px}
+  #printArea table{width:100%;border-collapse:collapse}
+  #printArea th,#printArea td{border:1px solid #999;padding:4px 6px;text-align:left;color:#000}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="offlineBar">MODO OFFLINE — vendas serão sincronizadas quando a internet voltar</div>
+
+<!-- LOGIN -->
+<div id="authView">
+  <div class="lockup">
+    <div class="mark">♥</div>
+    <div class="word">Encontro de<br><b style="color:var(--brand)">Namorados</b></div>
+    <div class="stroke"></div>
+  </div>
+  <div class="card">
+    <div id="loginForm">
+      <h2 style="font-size:17px">Entrar</h2>
+      <label>E-mail</label><input id="loginEmail" type="email" autocomplete="username" inputmode="email">
+      <label>Senha</label><input id="loginPass" type="password" autocomplete="current-password">
+      <div style="height:14px"></div>
+      <button class="btn primary block" onclick="doLogin()">Entrar</button>
+      <div style="text-align:center;margin-top:12px">
+        <button class="btn ghost small" onclick="toggleBootstrap(true)">Primeiro acesso — criar Admin Master</button>
+      </div>
+    </div>
+    <div id="bootForm" style="display:none">
+      <h2 style="font-size:17px">Criar Admin Master</h2>
+      <p class="mut small">Disponível apenas no primeiro acesso do sistema.</p>
+      <label>Nome</label><input id="bootName">
+      <label>E-mail</label><input id="bootEmail" type="email" inputmode="email">
+      <label>Senha (mín. 6)</label><input id="bootPass" type="password">
+      <div style="height:14px"></div>
+      <button class="btn primary block" onclick="doBootstrap()">Criar e entrar</button>
+      <div style="text-align:center;margin-top:12px">
+        <button class="btn ghost small" onclick="toggleBootstrap(false)">Voltar ao login</button>
+      </div>
+    </div>
+    <div id="authMsg" class="small" style="color:var(--bad);margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none">
+  <div id="topbar">
+    <span class="brand">♥ Encontro <b>de Namorados</b></span>
+    <span id="topEvent" class="tag amber"></span>
+    <span class="right mut small" id="topUser"></span>
+    <button class="btn small ghost" onclick="doLogout()">Sair</button>
+  </div>
+  <div id="nav"></div>
+  <main>
+    <div id="view-pdv" class="view"></div>
+    <div id="view-caixa" class="view"></div>
+    <div id="view-painel" class="view"></div>
+    <div id="view-evento" class="view"></div>
+    <div id="view-produtos" class="view"></div>
+    <div id="view-vendas" class="view"></div>
+    <div id="view-usuarios" class="view"></div>
+    <div id="view-relatorios" class="view"></div>
+    <div id="view-auditoria" class="view"></div>
+  </main>
+  <div id="cartBar" style="display:none"><div class="inner" id="cartInner"></div></div>
+</div>
+
+<div id="modalWrap" onclick="if(event.target===this)closeModal()"><div id="modalBox"></div></div>
+<div id="toast"></div>
+<div id="printArea"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+/* EventoPro — PDV de eventos com caixa individual por operador */
+const SUPABASE_URL = "https://rvpqfywtuzlsjlsmffsy.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2cHFmeXd0dXpsc2psc21mZnN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNzc5NTcsImV4cCI6MjA5ODc1Mzk1N30.CgxRurPc25pstLASp7cuk5S_njQNMBVDlqiAXGupCQU";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+let ME = null, EVENT = null, REG = null, PRODUCTS = [], CART = {}, PAY = null, LAST_SALE = null;
+let POLL = null, ADMIN_EVENT_ID = null;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = v => (Number(v)||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+const fdt = d => new Date(d).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+const fd  = d => new Date(d).toLocaleString("pt-BR");
+const N = v => { const n = parseFloat(String(v).replace(",", ".")); return isNaN(n) ? 0 : n; };
+const METHODS = [["dinheiro","Dinheiro"],["pix","Pix"],["debito","Débito"],["credito","Crédito"],["outro","Outro"]];
+const mlabel = m => (METHODS.find(x=>x[0]===m)||["","?"])[1];
+
+function toast(msg, ms=2600){ const t=$("toast"); t.textContent=msg; t.style.display="block"; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display="none",ms); }
+function openModal(html){ $("modalBox").innerHTML=html; $("modalWrap").classList.add("on"); }
+function closeModal(){ $("modalWrap").classList.remove("on"); }
+function audit(action, details){ try{ sb.from("ep_audit").insert({event_id:EVENT?.id||null,user_id:ME?.id||null,action,details:details||null}).then(()=>{});}catch(e){} }
+
+/* ---------- AUTH ---------- */
+function toggleBootstrap(on){ $("loginForm").style.display=on?"none":"block"; $("bootForm").style.display=on?"block":"none"; $("authMsg").textContent=""; }
+async function doLogin(){
+  $("authMsg").textContent="";
+  const { error } = await sb.auth.signInWithPassword({ email:$("loginEmail").value.trim(), password:$("loginPass").value });
+  if(error){ $("authMsg").textContent = "Falha no login: " + error.message; return; }
+  boot();
+}
+async function doBootstrap(){
+  $("authMsg").textContent="";
+  const email=$("bootEmail").value.trim(), pass=$("bootPass").value, name=$("bootName").value.trim();
+  const { error } = await sb.rpc("ep_bootstrap_admin",{ p_email:email, p_password:pass, p_name:name });
+  if(error){ $("authMsg").textContent = error.message; return; }
+  const r = await sb.auth.signInWithPassword({ email, password:pass });
+  if(r.error){ $("authMsg").textContent = r.error.message; return; }
+  boot();
+}
+async function doLogout(){ await sb.auth.signOut(); location.reload(); }
+
+async function boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){ $("authView").style.display="block"; $("app").style.display="none"; return; }
+  const { data:prof, error } = await sb.from("ep_profiles").select("*").eq("id",session.user.id).single();
+  if(error || !prof || !prof.active){
+    $("authMsg").textContent = "Conta sem acesso ao EventoPro ou desativada.";
+    await sb.auth.signOut(); return;
+  }
+  ME = prof;
+  $("authView").style.display="none"; $("app").style.display="block";
+  $("topUser").textContent = ME.name + (ME.role==="admin" ? " · Admin Master" : " · Operador");
+  await loadEvent();
+  buildNav();
+  go(ME.role==="admin" ? "painel" : "pdv");
+  syncQueue();
+}
+
+async function loadEvent(){
+  const { data } = await sb.from("ep_events").select("*").eq("status","aberto").order("created_at",{ascending:false}).limit(1);
+  EVENT = (data && data[0]) || null;
+  $("topEvent").textContent = EVENT ? EVENT.name : "Nenhum evento aberto";
+  if(EVENT){
+    await loadProducts();
+    const { data:regs } = await sb.from("ep_registers").select("*").eq("event_id",EVENT.id).eq("operator_id",ME.id).eq("status","aberto").limit(1);
+    REG = (regs && regs[0]) || null;
+  } else { REG=null; PRODUCTS=[]; }
+}
+async function loadProducts(){
+  if(!EVENT) return;
+  const { data } = await sb.from("ep_products").select("*").eq("event_id",EVENT.id).order("name");
+  if(data){ PRODUCTS = data; localStorage.setItem("ep_products_"+EVENT.id, JSON.stringify(data)); }
+  else { PRODUCTS = JSON.parse(localStorage.getItem("ep_products_"+EVENT.id)||"[]"); }
+}
+
+/* ---------- NAV ---------- */
+const TABS_OP = [["pdv","Vender"],["caixa","Meu caixa"]];
+const TABS_ADM = [["painel","Painel"],["pdv","Vender"],["caixa","Meu caixa"],["evento","Evento"],["produtos","Produtos"],["vendas","Vendas"],["usuarios","Usuários"],["relatorios","Relatórios"],["auditoria","Auditoria"]];
+function buildNav(){
+  const tabs = ME.role==="admin" ? TABS_ADM : TABS_OP;
+  $("nav").innerHTML = tabs.map(t=>`<button class="navbtn" id="nav-${t[0]}" onclick="go('${t[0]}')">${t[1]}</button>`).join("");
+}
+function go(v){
+  document.querySelectorAll(".view").forEach(x=>x.classList.remove("on"));
+  document.querySelectorAll(".navbtn").forEach(x=>x.classList.remove("on"));
+  $("view-"+v).classList.add("on");
+  const nb=$("nav-"+v); if(nb) nb.classList.add("on");
+  $("cartBar").style.display = (v==="pdv" && REG) ? "block" : "none";
+  clearInterval(POLL);
+  const R = { pdv:renderPDV, caixa:renderCaixa, painel:renderPainel, evento:renderEvento, produtos:renderProdutos, vendas:renderVendas, usuarios:renderUsuarios, relatorios:renderRelatorios, auditoria:renderAuditoria };
+  (R[v]||(()=>{}))();
+  if(v==="painel") POLL = setInterval(renderPainel, 10000);
+}
+
+/* ---------- PDV ---------- */
+function renderPDV(){
+  const el = $("view-pdv");
+  if(!EVENT){ el.innerHTML = `<div class="card"><h2>Nenhum evento aberto</h2><p class="mut">Peça ao Administrador Master para abrir um evento.</p></div>`; return; }
+  if(!REG){
+    el.innerHTML = `<div class="card">
+      <h2>Abrir caixa</h2>
+      <p class="mut small">Evento: <b>${esc(EVENT.name)}</b> · Operador: <b>${esc(ME.name)}</b> · ${fd(Date.now())}</p>
+      <label>Fundo de caixa (dinheiro inicial)</label><input id="openCash" inputmode="decimal" placeholder="0,00">
+      <label>Observações</label><textarea id="openNotes" rows="2"></textarea>
+      <div style="height:12px"></div>
+      <button class="btn primary block" onclick="abrirCaixa()">Abrir caixa e começar a vender</button>
+    </div>`;
+    $("cartBar").style.display="none";
+    return;
+  }
+  el.innerHTML = `<div class="row" style="margin-bottom:10px">
+      <span class="tag ok">Caixa aberto ${fdt(REG.opened_at)}</span>
+      <span class="tag">Fundo ${fmt(REG.opening_cash)}</span>
+      <button class="btn small right" onclick="go('caixa')">Meu caixa →</button>
+    </div>
+    <div id="pdvGrid"></div>`;
+  $("pdvGrid").innerHTML = PRODUCTS.filter(p=>p.active).map(p=>{
+    const low = p.stock<=p.min_stock, out = p.stock<=0;
+    return `<button class="pbtn ${low?'low':''} ${out?'out':''}" onclick="addCart('${p.id}')">
+      <span class="pn">${esc(p.name)}</span>
+      <span><span class="pp num">${fmt(p.price)}</span><br><span class="ps num">estoque ${p.stock}</span></span>
+    </button>`;
+  }).join("") || `<div class="card mut">Nenhum produto cadastrado neste evento.</div>`;
+  $("cartBar").style.display="block";
+  renderCart();
+}
+function addCart(pid){ CART[pid]=(CART[pid]||0)+1; renderCart(); }
+function decCart(pid){ if(!CART[pid])return; CART[pid]--; if(CART[pid]<=0) delete CART[pid]; renderCart(); }
+function cartTotal(){ return Object.entries(CART).reduce((s,[pid,q])=>{ const p=PRODUCTS.find(x=>x.id===pid); return s + (p?Number(p.price)*q:0); },0); }
+function renderCart(){
+  const items = Object.entries(CART);
+  const total = cartTotal();
+  $("cartInner").innerHTML = `
+    ${items.map(([pid,q])=>{ const p=PRODUCTS.find(x=>x.id===pid); if(!p) return "";
+      return `<div class="cartline"><span style="flex:1">${esc(p.name)}</span>
+        <button class="qbtn" onclick="decCart('${pid}')">−</button><b class="num">${q}</b>
+        <button class="qbtn" onclick="addCart('${pid}')">+</button>
+        <b class="num" style="width:86px;text-align:right">${fmt(p.price*q)}</b></div>`; }).join("")}
+    <div class="payrow">${METHODS.map(([k,l])=>`<button class="paybtn ${PAY===k?'on':''}" onclick="setPay('${k}')">${l}</button>`).join("")}</div>
+    <div class="row">
+      <div><div class="mut small">TOTAL</div><div id="totalBig" class="num">${fmt(total)}</div></div>
+      <button class="btn small ghost" onclick="clearCart()" ${items.length?'':'disabled'}>Limpar</button>
+      <button class="btn small ghost" onclick="splitPay()" ${items.length?'':'disabled'}>Dividir pgto</button>
+      <button class="btn primary right" style="min-width:170px" onclick="concluirVenda()" ${items.length&&PAY?'':'disabled'}>CONCLUIR VENDA</button>
+    </div>`;
+}
+function setPay(k){ PAY=k; renderCart(); }
+function clearCart(){ CART={}; PAY=null; renderCart(); }
+function splitPay(){
+  const total = cartTotal();
+  openModal(`<h2>Dividir pagamento</h2><p class="mut small">Total: <b class="num">${fmt(total)}</b>. Informe o valor de cada forma (restante fica na última preenchida).</p>
+    ${METHODS.map(([k,l])=>`<label>${l}</label><input id="sp_${k}" inputmode="decimal" placeholder="0,00">`).join("")}
+    <div style="height:12px"></div>
+    <button class="btn primary block" onclick="confirmSplit()">Concluir venda com pagamento dividido</button>`);
+}
+async function confirmSplit(){
+  const total = cartTotal();
+  let pays = METHODS.map(([k])=>({method:k,amount:N($("sp_"+k).value)})).filter(p=>p.amount>0);
+  const sum = pays.reduce((s,p)=>s+p.amount,0);
+  if(Math.abs(sum-total)>0.009){ toast("Soma "+fmt(sum)+" difere do total "+fmt(total)); return; }
+  closeModal(); await saveSale(pays);
+}
+async function concluirVenda(){
+  const total = cartTotal();
+  if(!PAY || total<=0) return;
+  await saveSale([{method:PAY, amount:total}]);
+}
+async function saveSale(payments){
+  const items = Object.entries(CART).map(([pid,q])=>{ const p=PRODUCTS.find(x=>x.id===pid);
+    return { product_id:pid, product_name:p.name, qty:q, unit_price:Number(p.price), subtotal:Number(p.price)*q }; });
+  const total = items.reduce((s,i)=>s+i.subtotal,0);
+  const sale = { offline_id: crypto.randomUUID(), event_id:EVENT.id, register_id:REG.id, operator_id:ME.id, total, items, payments, created_at:new Date().toISOString() };
+  items.forEach(i=>{ const p=PRODUCTS.find(x=>x.id===i.product_id); if(p) p.stock-=i.qty; });
+  CART={}; PAY=null; renderPDV();
+  if(!navigator.onLine){ queueSale(sale); toast("Venda salva OFFLINE — será sincronizada"); return; }
+  const ok = await pushSale(sale);
+  if(ok){ LAST_SALE=sale; toast("Venda concluída — "+fmt(total)); showReceiptOffer(sale); }
+  else { queueSale(sale); toast("Sem conexão — venda guardada para sincronizar"); }
+}
+async function pushSale(s){
+  try{
+    const { data, error } = await sb.from("ep_sales").insert({
+      offline_id:s.offline_id, event_id:s.event_id, register_id:s.register_id, operator_id:s.operator_id, total:s.total, created_at:s.created_at
+    }).select("id").single();
+    if(error){ if(String(error.message).includes("duplicate")) return true; return false; }
+    const sid = data.id;
+    const { error:e1 } = await sb.from("ep_sale_items").insert(s.items.map(i=>({sale_id:sid, ...i})));
+    const { error:e2 } = await sb.from("ep_sale_payments").insert(s.payments.map(p=>({sale_id:sid, ...p})));
+    if(e1||e2) return false;
+    audit("venda", { sale_id:sid, total:s.total });
+    return true;
+  }catch(e){ return false; }
+}
+function queueSale(s){ const q=JSON.parse(localStorage.getItem("ep_queue")||"[]"); q.push(s); localStorage.setItem("ep_queue",JSON.stringify(q)); }
+async function syncQueue(){
+  if(!navigator.onLine) return;
+  let q=JSON.parse(localStorage.getItem("ep_queue")||"[]");
+  if(!q.length) return;
+  const rest=[];
+  for(const s of q){ if(!(await pushSale(s))) rest.push(s); }
+  localStorage.setItem("ep_queue",JSON.stringify(rest));
+  if(q.length!==rest.length) toast(`${q.length-rest.length} venda(s) offline sincronizada(s)`);
+}
+window.addEventListener("online", ()=>{ $("offlineBar").classList.remove("on"); syncQueue(); });
+window.addEventListener("offline", ()=>$("offlineBar").classList.add("on"));
+if(!navigator.onLine) $("offlineBar").classList.add("on");
+
+function showReceiptOffer(sale){
+  const t=$("toast");
+  t.innerHTML = `Venda ${fmt(sale.total)} concluída &nbsp; <button class="btn small" onclick="printReceipt()">🖨 Comprovante</button>`;
+  t.style.display="block"; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display="none",6000);
+}
+function printReceipt(){
+  const s=LAST_SALE; if(!s) return;
+  $("printArea").innerHTML = `<div style="max-width:280px;font-family:monospace">
+    <h1 style="font-size:15px;margin:0">EVENTOPRO — COMPROVANTE INTERNO</h1>
+    <p>${esc(EVENT.name)}<br>Operador: ${esc(ME.name)}<br>${fd(s.created_at)}</p>
+    <table>${s.items.map(i=>`<tr><td>${i.qty}x ${esc(i.product_name)}</td><td style="text-align:right">${fmt(i.subtotal)}</td></tr>`).join("")}
+    <tr><td><b>TOTAL</b></td><td style="text-align:right"><b>${fmt(s.total)}</b></td></tr>
+    ${s.payments.map(p=>`<tr><td>${mlabel(p.method)}</td><td style="text-align:right">${fmt(p.amount)}</td></tr>`).join("")}</table>
+    <p>* Sem valor fiscal</p></div>`;
+  window.print();
+}
+
+/* ---------- CAIXA (abertura/sangria/fechamento) ---------- */
+async function abrirCaixa(){
+  const cash = N($("openCash").value);
+  const { data, error } = await sb.from("ep_registers").insert({
+    event_id:EVENT.id, operator_id:ME.id, opening_cash:cash, opening_notes:$("openNotes").value||null
+  }).select("*").single();
+  if(error){ toast("Erro ao abrir caixa: "+error.message); return; }
+  REG = data; audit("abertura_caixa",{register_id:REG.id,fundo:cash});
+  toast("Caixa aberto"); renderPDV(); $("cartBar").style.display="block";
+}
+async function regStats(regId){
+  const { data:sales } = await sb.from("ep_sales")
+    .select("id,total,status,created_at,ep_sale_payments(method,amount)")
+    .eq("register_id",regId).eq("status","ok");
+  const { data:sang } = await sb.from("ep_sangrias").select("*").eq("register_id",regId).order("created_at");
+  const by = {dinheiro:0,pix:0,debito:0,credito:0,outro:0};
+  let total=0;
+  (sales||[]).forEach(s=>{ total+=Number(s.total); (s.ep_sale_payments||[]).forEach(p=>by[p.method]+=Number(p.amount)); });
+  const nSang = (sang||[]).reduce((s,x)=>s+Number(x.amount),0);
+  return { sales:sales||[], sangrias:sang||[], total, n:(sales||[]).length, by, totalSang:nSang,
+    ticket:(sales||[]).length? total/(sales||[]).length : 0 };
+}
+async function renderCaixa(){
+  const el=$("view-caixa");
+  if(!REG){
+    let closedHtml="";
+    if(EVENT){
+      const { data:closed } = await sb.from("ep_registers").select("*").eq("event_id",EVENT.id).eq("operator_id",ME.id).eq("status","fechado").order("closed_at",{ascending:false});
+      if(closed&&closed.length){
+        closedHtml = `<div class="card"><h3>Caixas fechados</h3>`+closed.map(r=>`
+          <div class="alertline ${Number(r.difference)?'bad':''}"><span>Fechado ${fdt(r.closed_at)} · esperado ${fmt(r.expected_cash)} · contado ${fmt(r.counted_cash)}</span>
+          <b class="right num" style="color:${Number(r.difference)? 'var(--bad)':'var(--ok)'}">${Number(r.difference)>0?'+':''}${fmt(r.difference)}</b></div>`).join("")+`</div>`;
+      }
+    }
+    el.innerHTML = `<div class="card"><h2>Sem caixa aberto</h2><p class="mut">Abra seu caixa na aba Vender.</p></div>`+closedHtml;
+    return;
+  }
+  const st = await regStats(REG.id);
+  const espDin = Number(REG.opening_cash)+st.by.dinheiro-st.totalSang;
+  el.innerHTML = `
+    <h2>Meu caixa</h2>
+    <div class="kpis">
+      <div class="kpi"><div class="v num">${fmt(st.total)}</div><div class="l">Total vendido</div></div>
+      <div class="kpi"><div class="v num">${st.n}</div><div class="l">Vendas</div></div>
+      <div class="kpi"><div class="v num">${fmt(st.ticket)}</div><div class="l">Ticket médio</div></div>
+      <div class="kpi"><div class="v num">${fmt(espDin)}</div><div class="l">Dinheiro em caixa (esperado)</div></div>
+    </div>
+    <div class="card"><h3>Por forma de pagamento</h3>
+      ${METHODS.map(([k,l])=>`<div class="row" style="padding:5px 0"><span>${l}</span><b class="right num">${fmt(st.by[k])}</b></div>`).join("")}
+    </div>
+    <div class="card"><div class="row"><h3 style="margin:0">Sangrias · ${fmt(st.totalSang)}</h3>
+      <button class="btn small right" onclick="modalSangria()">+ Nova sangria</button></div>
+      ${st.sangrias.map(s=>`<div class="row small" style="padding:6px 0;border-bottom:1px dashed var(--line)">
+        <span>${fdt(s.created_at)} · ${esc(s.reason)} · resp.: ${esc(s.responsible)}</span><b class="right num" style="color:var(--bad)">−${fmt(s.amount)}</b></div>`).join("") || `<p class="mut small">Nenhuma sangria.</p>`}
+    </div>
+    <button class="btn danger block" onclick="modalFechamento()">Fechar meu caixa</button>`;
+}
+function modalSangria(){
+  openModal(`<h2>Sangria de caixa</h2>
+    <label>Valor retirado</label><input id="sgVal" inputmode="decimal" placeholder="0,00">
+    <label>Motivo</label><input id="sgMotivo" placeholder="ex.: troco, pagamento fornecedor">
+    <label>Responsável pela retirada</label><input id="sgResp" value="${esc(ME.name)}">
+    <p class="mut small">Data e hora registradas automaticamente.</p>
+    <button class="btn primary block" onclick="salvarSangria()">Registrar sangria</button>`);
+}
+async function salvarSangria(){
+  const v=N($("sgVal").value), m=$("sgMotivo").value.trim(), r=$("sgResp").value.trim();
+  if(v<=0||!m||!r){ toast("Preencha valor, motivo e responsável"); return; }
+  const { error } = await sb.from("ep_sangrias").insert({register_id:REG.id,event_id:EVENT.id,amount:v,reason:m,responsible:r,created_by:ME.id});
+  if(error){ toast("Erro: "+error.message); return; }
+  audit("sangria",{register_id:REG.id,valor:v,motivo:m});
+  closeModal(); toast("Sangria registrada"); renderCaixa();
+}
+async function modalFechamento(){
+  const st = await regStats(REG.id);
+  const espDin = Number(REG.opening_cash)+st.by.dinheiro-st.totalSang;
+  const espCartao = st.by.debito+st.by.credito;
+  window._fech = { st, espDin };
+  openModal(`<h2>Fechamento do caixa</h2>
+    <table>
+      <tr><td>Total vendido</td><td class="num" style="text-align:right"><b>${fmt(st.total)}</b></td></tr>
+      <tr><td>Número de vendas</td><td class="num" style="text-align:right">${st.n}</td></tr>
+      <tr><td>Fundo inicial</td><td class="num" style="text-align:right">${fmt(REG.opening_cash)}</td></tr>
+      <tr><td>Recebido em dinheiro</td><td class="num" style="text-align:right">${fmt(st.by.dinheiro)}</td></tr>
+      <tr><td>Sangrias</td><td class="num" style="text-align:right">−${fmt(st.totalSang)}</td></tr>
+      <tr><td><b>Esperado em dinheiro (conferência)</b></td><td class="num" style="text-align:right"><b>${fmt(espDin)}</b></td></tr>
+      <tr><td>Esperado em Pix</td><td class="num" style="text-align:right">${fmt(st.by.pix)}</td></tr>
+      <tr><td>Esperado em cartão</td><td class="num" style="text-align:right">${fmt(espCartao)}</td></tr>
+      <tr><td>Outras formas</td><td class="num" style="text-align:right">${fmt(st.by.outro)}</td></tr>
+    </table>
+    <label>Valor contado em dinheiro</label><input id="fcContado" inputmode="decimal" placeholder="0,00" oninput="calcDiff()">
+    <div id="fcDiff" style="margin-top:10px"></div>
+    <div id="fcJustWrap" style="display:none"><label>Justificativa da divergência (obrigatória)</label><textarea id="fcJust" rows="2"></textarea></div>
+    <label>Observações</label><textarea id="fcObs" rows="2"></textarea>
+    <div style="height:12px"></div>
+    <button class="btn primary block" onclick="confirmarFechamento()">Concluir fechamento</button>
+    <p class="mut small" style="margin-top:8px">Após fechado, o caixa fica bloqueado para novas vendas. Reabertura apenas pelo Administrador Master.</p>`);
+}
+function calcDiff(){
+  const { espDin } = window._fech;
+  const contado = N($("fcContado").value);
+  const diff = contado - espDin;
+  const box=$("fcDiff"), jw=$("fcJustWrap");
+  if(Math.abs(diff)<0.005){ box.innerHTML=`<div class="diffok">Caixa confere — diferença R$ 0,00</div>`; jw.style.display="none"; }
+  else{ box.innerHTML=`<div class="diffbad">${diff>0?"SOBRA":"FALTA"} de caixa: ${fmt(Math.abs(diff))}</div>`; jw.style.display="block"; }
+}
+async function confirmarFechamento(){
+  const { st, espDin } = window._fech;
+  const contado = N($("fcContado").value);
+  const diff = Math.round((contado-espDin)*100)/100;
+  const just = ($("fcJust")?.value||"").trim();
+  if(Math.abs(diff)>=0.005 && !just){ toast("Divergência exige justificativa"); return; }
+  const { error } = await sb.from("ep_registers").update({
+    status:"fechado", closed_at:new Date().toISOString(), expected_cash:espDin, counted_cash:contado,
+    difference:diff, justification: Math.abs(diff)>=0.005 ? just : null, closing_notes: $("fcObs").value||null
+  }).eq("id",REG.id);
+  if(error){ toast("Erro: "+error.message); return; }
+  audit("fechamento_caixa",{register_id:REG.id,esperado:espDin,contado,diferenca:diff});
+  closeModal(); toast(diff===0?"Caixa fechado sem divergência":"Caixa fechado com divergência de "+fmt(diff));
+  REG=null; go("caixa");
+}
+
+/* ---------- DADOS DO EVENTO (agregados) ---------- */
+async function eventData(eid){
+  const [sales, regs, profs, sang, prods, exps, adjs, counts] = await Promise.all([
+    sb.from("ep_sales").select("id,total,status,operator_id,register_id,created_at,cancel_reason,ep_sale_payments(method,amount),ep_sale_items(product_id,product_name,qty,unit_price,subtotal)").eq("event_id",eid).order("created_at",{ascending:false}),
+    sb.from("ep_registers").select("*").eq("event_id",eid),
+    sb.from("ep_profiles").select("id,name,role,active"),
+    sb.from("ep_sangrias").select("*").eq("event_id",eid),
+    sb.from("ep_products").select("*").eq("event_id",eid),
+    sb.from("ep_expenses").select("*").eq("event_id",eid),
+    sb.from("ep_stock_adjustments").select("*").eq("event_id",eid),
+    sb.from("ep_stock_counts").select("*").eq("event_id",eid),
+  ]);
+  return { sales:sales.data||[], regs:regs.data||[], profs:profs.data||[], sang:sang.data||[],
+           prods:prods.data||[], exps:exps.data||[], adjs:adjs.data||[], counts:counts.data||[] };
+}
+function aggregate(D){
+  const ok = D.sales.filter(s=>s.status==="ok");
+  const by={dinheiro:0,pix:0,debito:0,credito:0,outro:0};
+  let total=0, cmv=0;
+  const perOp={}, perProd={};
+  const pname = id => (D.profs.find(p=>p.id===id)||{name:"?"}).name;
+  ok.forEach(s=>{
+    total+=Number(s.total);
+    (s.ep_sale_payments||[]).forEach(p=>by[p.method]+=Number(p.amount));
+    const o = perOp[s.operator_id] ||= { name:pname(s.operator_id), n:0, total:0, by:{dinheiro:0,pix:0,debito:0,credito:0,outro:0} };
+    o.n++; o.total+=Number(s.total);
+    (s.ep_sale_payments||[]).forEach(p=>o.by[p.method]+=Number(p.amount));
+    (s.ep_sale_items||[]).forEach(i=>{
+      const pr = D.prods.find(p=>p.id===i.product_id);
+      cmv += Number(pr?.cost||0)*i.qty;
+      const pp = perProd[i.product_name] ||= { name:i.product_name, qty:0, total:0, cost:0 };
+      pp.qty+=i.qty; pp.total+=Number(i.subtotal); pp.cost+=Number(pr?.cost||0)*i.qty;
+    });
+  });
+  const totalSang = D.sang.reduce((s,x)=>s+Number(x.amount),0);
+  const compras = D.exps.filter(e=>e.kind==="compra").reduce((s,e)=>s+Number(e.amount),0);
+  const despesas = D.exps.filter(e=>e.kind==="despesa").reduce((s,e)=>s+Number(e.amount),0);
+  return { ok, total, n:ok.length, ticket: ok.length? total/ok.length:0, by, perOp, perProd, cmv, totalSang, compras, despesas, pname };
+}
+
+/* ---------- PAINEL ADMIN ---------- */
+async function renderPainel(){
+  const el=$("view-painel");
+  if(!EVENT){ el.innerHTML=`<div class="card"><h2>Nenhum evento aberto</h2><p class="mut">Crie um evento na aba Evento.</p></div>`; return; }
+  const D = await eventData(EVENT.id); const A = aggregate(D);
+  const openRegs = D.regs.filter(r=>r.status==="aberto");
+  const diverg = D.regs.filter(r=>r.status==="fechado" && Math.abs(Number(r.difference))>=0.005);
+  const lowStock = D.prods.filter(p=>p.active && p.stock<=p.min_stock);
+  const rankFat = Object.values(A.perOp).sort((a,b)=>b.total-a.total);
+  const rankQtd = [...rankFat].sort((a,b)=>b.n-a.n);
+  const topProd = Object.values(A.perProd).sort((a,b)=>b.qty-a.qty).slice(0,8);
+  el.innerHTML = `
+    <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Painel — ${esc(EVENT.name)}</h2>
+      <span class="mut small right">atualiza a cada 10s</span></div>
+    <div class="kpis">
+      <div class="kpi"><div class="v num">${fmt(A.total)}</div><div class="l">Total arrecadado</div></div>
+      <div class="kpi"><div class="v num">${A.n}</div><div class="l">Vendas</div></div>
+      <div class="kpi"><div class="v num">${fmt(A.ticket)}</div><div class="l">Ticket médio</div></div>
+      <div class="kpi"><div class="v num">${openRegs.length}</div><div class="l">Caixas abertos</div></div>
+    </div>
+    <div class="card"><h3>Por forma de pagamento</h3>
+      ${METHODS.map(([k,l])=>`<div class="row" style="padding:4px 0"><span>${l}</span><b class="right num">${fmt(A.by[k])}</b></div>`).join("")}</div>
+    ${(diverg.length||lowStock.length)?`<div class="card"><h3>Alertas</h3>
+      ${diverg.map(r=>`<div class="alertline bad">⚠️ Divergência de caixa — ${esc(A.pname(r.operator_id))}: ${Number(r.difference)>0?'sobra':'falta'} de ${fmt(Math.abs(r.difference))}</div>`).join("")}
+      ${lowStock.map(p=>`<div class="alertline amber">📦 Estoque baixo — ${esc(p.name)}: ${p.stock} un (mín. ${p.min_stock})</div>`).join("")}
+    </div>`:""}
+    <div class="card"><h3>Caixas / operadores conectados</h3><div class="tbl-wrap"><table>
+      <tr><th>Operador</th><th>Status</th><th>Vendas</th><th>Vendido</th><th></th></tr>
+      ${D.regs.sort((a,b)=>a.status.localeCompare(b.status)).map(r=>{ const o=A.perOp[r.operator_id]||{n:0,total:0};
+        return `<tr><td>${esc(A.pname(r.operator_id))}</td>
+        <td>${r.status==="aberto"?'<span class="tag ok">aberto</span>':`<span class="tag ${Math.abs(Number(r.difference))>=0.005?'bad':''}">fechado ${Number(r.difference)?fmt(r.difference):''}</span>`}</td>
+        <td class="num">${o.n}</td><td class="num">${fmt(o.total)}</td>
+        <td>${r.status==="fechado"?`<button class="btn small" onclick="reabrirCaixa('${r.id}')">Reabrir</button>`:""}</td></tr>`; }).join("") || `<tr><td colspan="5" class="mut">Nenhum caixa aberto ainda.</td></tr>`}
+    </table></div></div>
+    <div class="grid2">
+      <div class="card"><h3>Ranking por faturamento</h3>${rankFat.map((o,i)=>`<div class="row" style="padding:4px 0"><span>${i+1}º ${esc(o.name)}</span><b class="right num">${fmt(o.total)}</b></div>`).join("")||'<p class="mut small">—</p>'}</div>
+      <div class="card"><h3>Ranking por nº de vendas</h3>${rankQtd.map((o,i)=>`<div class="row" style="padding:4px 0"><span>${i+1}º ${esc(o.name)}</span><b class="right num">${o.n}</b></div>`).join("")||'<p class="mut small">—</p>'}</div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Produtos mais vendidos</h3>${topProd.map(p=>`<div class="row" style="padding:4px 0"><span>${esc(p.name)}</span><b class="right num">${p.qty} un · ${fmt(p.total)}</b></div>`).join("")||'<p class="mut small">—</p>'}</div>
+      <div class="card"><h3>Estoque em tempo real</h3>${D.prods.map(p=>`<div class="row" style="padding:4px 0"><span>${esc(p.name)}</span><b class="right num" style="color:${p.stock<=p.min_stock?'var(--bad)':'inherit'}">${p.stock} un</b></div>`).join("")||'<p class="mut small">—</p>'}</div>
+    </div>`;
+}
+async function reabrirCaixa(rid){
+  if(!confirm("Reabrir este caixa? O fechamento anterior será descartado.")) return;
+  const { error } = await sb.rpc("ep_admin_reopen_register",{p_register_id:rid});
+  if(error){ toast(error.message); return; }
+  audit("reabertura_caixa",{register_id:rid});
+  toast("Caixa reaberto"); renderPainel();
+}
+
+/* ---------- EVENTO (admin) ---------- */
+async function renderEvento(){
+  const el=$("view-evento");
+  const { data:evs } = await sb.from("ep_events").select("*").order("created_at",{ascending:false});
+  el.innerHTML = `
+    <div class="card"><h2>Novo evento</h2>
+      <label>Nome do evento</label><input id="evName" placeholder="ex.: Festa Junina 2026">
+      <label>Total investido (R$)</label><input id="evInv" inputmode="decimal" placeholder="0,00">
+      <label>Observações</label><textarea id="evNotes" rows="2"></textarea>
+      <div style="height:10px"></div>
+      <button class="btn primary" onclick="criarEvento()">Criar evento</button>
+      <p class="mut small">O evento mais recente com status aberto é o evento ativo para todos os operadores.</p>
+    </div>
+    ${(evs||[]).map(e=>`<div class="card"><div class="row">
+      <div><b>${esc(e.name)}</b> <span class="tag ${e.status==='aberto'?'ok':''}">${e.status}</span>
+        <div class="mut small">criado ${fdt(e.created_at)} · investido ${fmt(e.invested)}</div></div>
+      <div class="right row">
+        ${e.status==="aberto"?`<button class="btn small" onclick="editInvestido('${e.id}',${Number(e.invested)})">Investido</button>
+        <button class="btn small ok" onclick="fechamentoGeral('${e.id}')">Fechamento Geral</button>
+        <button class="btn small danger" onclick="encerrarEvento('${e.id}')">Encerrar</button>`
+        :`<button class="btn small" onclick="fechamentoGeral('${e.id}')">Relatório consolidado</button>`}
+      </div></div></div>`).join("")}`;
+}
+async function criarEvento(){
+  const name=$("evName").value.trim(); if(!name){ toast("Informe o nome"); return; }
+  const { error } = await sb.from("ep_events").insert({name,invested:N($("evInv").value),notes:$("evNotes").value||null,created_by:ME.id});
+  if(error){ toast(error.message); return; }
+  audit("evento_criado",{name});
+  toast("Evento criado"); await loadEvent(); renderEvento();
+}
+function editInvestido(eid,cur){
+  openModal(`<h2>Total investido</h2><label>Valor (R$)</label><input id="invVal" inputmode="decimal" value="${cur}">
+  <div style="height:10px"></div><button class="btn primary block" onclick="salvarInvestido('${eid}')">Salvar</button>`);
+}
+async function salvarInvestido(eid){
+  await sb.from("ep_events").update({invested:N($("invVal").value)}).eq("id",eid);
+  closeModal(); await loadEvent(); renderEvento(); toast("Atualizado");
+}
+async function encerrarEvento(eid){
+  const { data:open } = await sb.from("ep_registers").select("id").eq("event_id",eid).eq("status","aberto");
+  if(open&&open.length){ toast(`Há ${open.length} caixa(s) aberto(s). Feche todos antes de encerrar.`); return; }
+  if(!confirm("Encerrar o evento? Novas vendas serão bloqueadas.")) return;
+  await sb.from("ep_events").update({status:"encerrado",closed_at:new Date().toISOString()}).eq("id",eid);
+  audit("evento_encerrado",{event_id:eid});
+  toast("Evento encerrado"); await loadEvent(); renderEvento();
+}
+async function fechamentoGeral(eid){
+  const { data:ev } = await sb.from("ep_events").select("*").eq("id",eid).single();
+  const D = await eventData(eid); const A = aggregate(D);
+  const perdas = D.adjs.filter(a=>a.kind==="perda");
+  const consumos = D.adjs.filter(a=>a.kind==="consumo");
+  const qPerdas = perdas.reduce((s,a)=>s+a.qty,0), qCons = consumos.reduce((s,a)=>s+a.qty,0);
+  const vendidos = Object.values(A.perProd).reduce((s,p)=>s+p.qty,0);
+  const lucroBruto = A.total - A.cmv;
+  const saidas = A.despesas + A.compras;
+  const lucroLiq = lucroBruto - A.despesas;
+  const html = `
+    <h1>Fechamento Geral — ${esc(ev.name)}</h1>
+    <p>${fd(Date.now())} · Gerado por ${esc(ME.name)} (Admin Master)</p>
+    <h2>Financeiro</h2>
+    <table>
+      <tr><td>Total investido</td><td>${fmt(ev.invested)}</td></tr>
+      <tr><td>Total faturado (entradas)</td><td>${fmt(A.total)}</td></tr>
+      <tr><td>Custo das mercadorias vendidas</td><td>${fmt(A.cmv)}</td></tr>
+      <tr><td>Lucro bruto</td><td>${fmt(lucroBruto)}</td></tr>
+      <tr><td>Total de despesas</td><td>${fmt(A.despesas)}</td></tr>
+      <tr><td>Total de compras</td><td>${fmt(A.compras)}</td></tr>
+      <tr><td>Lucro líquido</td><td>${fmt(lucroLiq)}</td></tr>
+      <tr><td>Total de saídas</td><td>${fmt(saidas)}</td></tr>
+      <tr><td>Saldo final (entradas − saídas)</td><td>${fmt(A.total - saidas)}</td></tr>
+      <tr><td>Total de sangrias</td><td>${fmt(A.totalSang)}</td></tr>
+    </table>
+    <h2>Formas de pagamento</h2>
+    <table>${METHODS.map(([k,l])=>`<tr><td>${l}</td><td>${fmt(A.by[k])}</td></tr>`).join("")}</table>
+    <h2>Estoque</h2>
+    <table><tr><th>Produto</th><th>Inicial</th><th>Vendidos</th><th>Perdidos</th><th>Consumo interno</th><th>Restante</th></tr>
+    ${D.prods.map(p=>{
+      const v = (A.perProd[p.name]||{qty:0}).qty;
+      const pe = perdas.filter(a=>a.product_id===p.id).reduce((s,a)=>s+a.qty,0);
+      const co = consumos.filter(a=>a.product_id===p.id).reduce((s,a)=>s+a.qty,0);
+      return `<tr><td>${esc(p.name)}</td><td>${p.stock_initial}</td><td>${v}</td><td>${pe}</td><td>${co}</td><td>${p.stock}</td></tr>`; }).join("")}
+    <tr><td><b>Totais</b></td><td></td><td><b>${vendidos}</b></td><td><b>${qPerdas}</b></td><td><b>${qCons}</b></td><td><b>${D.prods.reduce((s,p)=>s+p.stock,0)}</b></td></tr></table>
+    <h2>Operadores</h2>
+    <table><tr><th>Operador</th><th>Vendas</th><th>Vendido</th><th>Dinheiro</th><th>Pix</th><th>Cartão</th><th>Sangrias</th><th>Diferença de caixa</th></tr>
+    ${Object.entries(A.perOp).map(([oid,o])=>{
+      const sg = D.sang.filter(s=>{const r=D.regs.find(r=>r.id===s.register_id);return r&&r.operator_id===oid;}).reduce((s,x)=>s+Number(x.amount),0);
+      const df = D.regs.filter(r=>r.operator_id===oid&&r.status==="fechado").reduce((s,r)=>s+Number(r.difference||0),0);
+      return `<tr><td>${esc(o.name)}</td><td>${o.n}</td><td>${fmt(o.total)}</td><td>${fmt(o.by.dinheiro)}</td><td>${fmt(o.by.pix)}</td><td>${fmt(o.by.debito+o.by.credito)}</td><td>${fmt(sg)}</td><td>${df? fmt(df):"—"}</td></tr>`; }).join("")}</table>`;
+  $("printArea").innerHTML = html;
+  openModal(`<h2>Fechamento Geral</h2><p class="mut small">Relatório consolidado gerado. Escolha o formato:</p>
+    <div class="grid2">
+      <button class="btn primary" onclick="window.print()">📄 PDF (imprimir)</button>
+      <button class="btn" onclick="expConsolidadoCSV('${eid}')">📊 Excel (CSV)</button>
+    </div>`);
+  audit("fechamento_geral",{event_id:eid});
+}
+
+/* ---------- PRODUTOS / ESTOQUE (admin) ---------- */
+async function renderProdutos(){
+  const el=$("view-produtos");
+  if(!EVENT){ el.innerHTML=`<div class="card mut">Crie um evento primeiro.</div>`; return; }
+  await loadProducts();
+  const { data:exps } = await sb.from("ep_expenses").select("*").eq("event_id",EVENT.id).order("created_at",{ascending:false});
+  const { data:adjs } = await sb.from("ep_stock_adjustments").select("*").eq("event_id",EVENT.id).order("created_at",{ascending:false}).limit(20);
+  const pname = id => (PRODUCTS.find(p=>p.id===id)||{name:"?"}).name;
+  el.innerHTML = `
+    <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Produtos & Estoque</h2>
+      <button class="btn small primary right" onclick="modalProduto()">+ Produto</button></div>
+    <div class="row" style="margin-bottom:10px">
+      <button class="btn small" onclick="modalConferencia('abertura')">Conferência de abertura</button>
+      <button class="btn small" onclick="modalConferencia('encerramento')">Conferência de encerramento</button>
+      <button class="btn small" onclick="modalAjuste()">Perda / consumo / entrada</button>
+      <button class="btn small" onclick="modalDespesa()">+ Compra / despesa</button>
+    </div>
+    <div class="card tbl-wrap"><table>
+      <tr><th>Produto</th><th>Preço</th><th>Custo</th><th>Estoque</th><th>Mín.</th><th></th></tr>
+      ${PRODUCTS.map(p=>`<tr>
+        <td>${esc(p.name)}${p.active?"":' <span class="tag bad">inativo</span>'}</td>
+        <td class="num">${fmt(p.price)}</td><td class="num">${fmt(p.cost)}</td>
+        <td class="num" style="color:${p.stock<=p.min_stock?'var(--bad)':'inherit'}">${p.stock}</td>
+        <td class="num">${p.min_stock}</td>
+        <td><button class="btn small" onclick="modalProduto('${p.id}')">Editar</button></td></tr>`).join("") || `<tr><td colspan="6" class="mut">Nenhum produto.</td></tr>`}
+    </table></div>
+    <div class="card"><h3>Compras & despesas</h3>
+      ${(exps||[]).map(e=>`<div class="row small" style="padding:5px 0;border-bottom:1px dashed var(--line)">
+        <span>${fdt(e.created_at)} · <span class="tag">${e.kind}</span> ${esc(e.description)}</span><b class="right num">−${fmt(e.amount)}</b></div>`).join("")||'<p class="mut small">Nenhum lançamento.</p>'}
+    </div>
+    <div class="card"><h3>Últimos ajustes de estoque</h3>
+      ${(adjs||[]).map(a=>`<div class="row small" style="padding:5px 0;border-bottom:1px dashed var(--line)">
+        <span>${fdt(a.created_at)} · <span class="tag">${a.kind}</span> ${esc(pname(a.product_id))} ${a.qty} un ${a.reason?("· "+esc(a.reason)):""}</span></div>`).join("")||'<p class="mut small">Nenhum ajuste.</p>'}
+    </div>`;
+}
+function modalProduto(pid){
+  const p = PRODUCTS.find(x=>x.id===pid) || {name:"",price:"",cost:0,stock_initial:0,stock:0,min_stock:5,active:true};
+  openModal(`<h2>${pid?"Editar":"Novo"} produto</h2>
+    <label>Nome</label><input id="prName" value="${esc(p.name)}">
+    <div class="grid2"><div><label>Preço de venda</label><input id="prPrice" inputmode="decimal" value="${p.price}"></div>
+    <div><label>Custo unitário</label><input id="prCost" inputmode="decimal" value="${p.cost}"></div></div>
+    <div class="grid3"><div><label>Estoque inicial</label><input id="prSt0" inputmode="numeric" value="${p.stock_initial}"></div>
+    <div><label>Estoque atual</label><input id="prSt" inputmode="numeric" value="${p.stock}"></div>
+    <div><label>Mínimo (alerta)</label><input id="prMin" inputmode="numeric" value="${p.min_stock}"></div></div>
+    <label>Ativo</label><select id="prAtivo"><option value="1" ${p.active?"selected":""}>Sim</option><option value="0" ${p.active?"":"selected"}>Não</option></select>
+    <div style="height:12px"></div>
+    <button class="btn primary block" onclick="salvarProduto('${pid||""}')">Salvar</button>`);
+}
+async function salvarProduto(pid){
+  const row = { event_id:EVENT.id, name:$("prName").value.trim(), price:N($("prPrice").value), cost:N($("prCost").value),
+    stock_initial:parseInt($("prSt0").value)||0, stock:parseInt($("prSt").value)||0, min_stock:parseInt($("prMin").value)||0,
+    active:$("prAtivo").value==="1" };
+  if(!row.name||row.price<=0){ toast("Nome e preço são obrigatórios"); return; }
+  const r = pid ? await sb.from("ep_products").update(row).eq("id",pid) : await sb.from("ep_products").insert(row);
+  if(r.error){ toast(r.error.message); return; }
+  audit(pid?"produto_editado":"produto_criado",{name:row.name});
+  closeModal(); toast("Salvo"); renderProdutos();
+}
+function modalConferencia(phase){
+  openModal(`<h2>Conferência de estoque — ${phase}</h2>
+    <p class="mut small">Informe a contagem física. O sistema registra esperado × contado.</p>
+    <table><tr><th>Produto</th><th>Sistema</th><th>Contado</th></tr>
+    ${PRODUCTS.map(p=>`<tr><td>${esc(p.name)}</td><td class="num">${p.stock}</td>
+      <td style="width:90px"><input id="cf_${p.id}" inputmode="numeric" value="${p.stock}" style="padding:7px 8px"></td></tr>`).join("")}</table>
+    <div style="height:12px"></div>
+    <button class="btn primary block" onclick="salvarConferencia('${phase}')">Registrar conferência</button>`);
+}
+async function salvarConferencia(phase){
+  const rows = PRODUCTS.map(p=>({ event_id:EVENT.id, phase, product_id:p.id, expected:p.stock, counted:parseInt($("cf_"+p.id).value)||0, created_by:ME.id }));
+  const { error } = await sb.from("ep_stock_counts").insert(rows);
+  if(error){ toast(error.message); return; }
+  audit("conferencia_estoque",{phase});
+  closeModal(); toast("Conferência registrada"); renderProdutos();
+}
+function modalAjuste(){
+  openModal(`<h2>Ajuste de estoque</h2>
+    <label>Produto</label><select id="ajProd">${PRODUCTS.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select>
+    <label>Tipo</label><select id="ajKind"><option value="perda">Perda</option><option value="consumo">Consumo interno</option><option value="entrada">Entrada (reposição)</option></select>
+    <label>Quantidade</label><input id="ajQty" inputmode="numeric" placeholder="0">
+    <label>Motivo</label><input id="ajReason">
+    <div style="height:12px"></div><button class="btn primary block" onclick="salvarAjuste()">Registrar</button>`);
+}
+async function salvarAjuste(){
+  const qty=parseInt($("ajQty").value)||0; if(qty<=0){ toast("Quantidade inválida"); return; }
+  const { error } = await sb.from("ep_stock_adjustments").insert({ event_id:EVENT.id, product_id:$("ajProd").value, kind:$("ajKind").value, qty, reason:$("ajReason").value||null, created_by:ME.id });
+  if(error){ toast(error.message); return; }
+  audit("ajuste_estoque",{kind:$("ajKind").value,qty});
+  closeModal(); toast("Registrado"); renderProdutos();
+}
+function modalDespesa(){
+  openModal(`<h2>Compra / despesa</h2>
+    <label>Tipo</label><select id="dpKind"><option value="compra">Compra (mercadoria)</option><option value="despesa">Despesa</option></select>
+    <label>Descrição</label><input id="dpDesc">
+    <label>Valor</label><input id="dpVal" inputmode="decimal" placeholder="0,00">
+    <div style="height:12px"></div><button class="btn primary block" onclick="salvarDespesa()">Lançar</button>`);
+}
+async function salvarDespesa(){
+  const v=N($("dpVal").value), d=$("dpDesc").value.trim();
+  if(v<=0||!d){ toast("Preencha descrição e valor"); return; }
+  const { error } = await sb.from("ep_expenses").insert({ event_id:EVENT.id, kind:$("dpKind").value, description:d, amount:v, created_by:ME.id });
+  if(error){ toast(error.message); return; }
+  audit("lancamento",{kind:$("dpKind").value,valor:v});
+  closeModal(); toast("Lançado"); renderProdutos();
+}
+
+/* ---------- VENDAS (busca + cancelamento) ---------- */
+let SALES_CACHE = [];
+async function renderVendas(){
+  const el=$("view-vendas");
+  if(!EVENT){ el.innerHTML=`<div class="card mut">Nenhum evento aberto.</div>`; return; }
+  const D = await eventData(EVENT.id);
+  SALES_CACHE = D.sales; window._pn = id => (D.profs.find(p=>p.id===id)||{name:"?"}).name;
+  el.innerHTML = `<h2>Vendas</h2>
+    <input id="saleSearch" placeholder="Pesquisar por código, operador ou produto…" oninput="filterVendas()">
+    <div style="height:10px"></div><div id="salesList"></div>`;
+  filterVendas();
+}
+function filterVendas(){
+  const q = ($("saleSearch").value||"").toLowerCase();
+  const list = SALES_CACHE.filter(s=>{
+    if(!q) return true;
+    return s.id.slice(0,8).includes(q) || window._pn(s.operator_id).toLowerCase().includes(q) ||
+      (s.ep_sale_items||[]).some(i=>i.product_name.toLowerCase().includes(q));
+  }).slice(0,120);
+  $("salesList").innerHTML = list.map(s=>`<div class="card" style="padding:12px">
+    <div class="row"><b class="num">${fmt(s.total)}</b>
+      ${s.status==="cancelada"?'<span class="tag bad">cancelada</span>':""}
+      <span class="mut small">#${s.id.slice(0,8)} · ${fdt(s.created_at)} · ${esc(window._pn(s.operator_id))}</span>
+      ${s.status==="ok"?`<button class="btn small danger right" onclick="modalCancelar('${s.id}')">Cancelar</button>`:""}
+    </div>
+    <div class="mut small">${(s.ep_sale_items||[]).map(i=>`${i.qty}x ${esc(i.product_name)}`).join(", ")}
+      · ${(s.ep_sale_payments||[]).map(p=>mlabel(p.method)).join(" + ")}
+      ${s.cancel_reason?` · motivo: ${esc(s.cancel_reason)}`:""}</div>
+  </div>`).join("") || `<div class="card mut">Nenhuma venda encontrada.</div>`;
+}
+function modalCancelar(sid){
+  openModal(`<h2>Cancelar venda</h2>
+    <p class="mut small">Cancelamento exige autorização do Administrador Master e motivo obrigatório. O estoque é estornado.</p>
+    <label>Motivo do cancelamento</label><textarea id="ccReason" rows="2"></textarea>
+    <div style="height:12px"></div>
+    <button class="btn danger block" onclick="cancelarVenda('${sid}')">Confirmar cancelamento</button>`);
+}
+async function cancelarVenda(sid){
+  const reason=$("ccReason").value.trim();
+  if(!reason){ toast("Motivo é obrigatório"); return; }
+  const { error } = await sb.from("ep_sales").update({ status:"cancelada", cancel_reason:reason, canceled_by:ME.id, canceled_at:new Date().toISOString() }).eq("id",sid);
+  if(error){ toast(error.message); return; }
+  audit("venda_cancelada",{sale_id:sid,motivo:reason});
+  closeModal(); toast("Venda cancelada e estoque estornado"); renderVendas();
+}
+
+/* ---------- USUÁRIOS (admin) ---------- */
+async function renderUsuarios(){
+  const el=$("view-usuarios");
+  const { data:users } = await sb.from("ep_profiles").select("*").order("created_at");
+  el.innerHTML = `
+    <div class="card"><h2>Criar conta</h2>
+      <label>Nome</label><input id="uName">
+      <label>E-mail (login)</label><input id="uEmail" type="email" inputmode="email">
+      <label>Senha (mín. 6)</label><input id="uPass">
+      <label>Papel</label><select id="uRole"><option value="operador">Operador de caixa</option><option value="admin">Admin Master</option></select>
+      <div style="height:12px"></div>
+      <button class="btn primary" onclick="criarUsuario()">Criar conta</button>
+    </div>
+    <div class="card tbl-wrap"><h3>Usuários</h3><table>
+      <tr><th>Nome</th><th>Papel</th><th>Status</th><th></th></tr>
+      ${(users||[]).map(u=>`<tr><td>${esc(u.name)}</td><td>${u.role==="admin"?"Admin Master":"Operador"}</td>
+        <td>${u.active?'<span class="tag ok">ativo</span>':'<span class="tag bad">inativo</span>'}</td>
+        <td class="row" style="gap:6px">
+          <button class="btn small" onclick="modalSenha('${u.id}','${esc(u.name)}')">Senha</button>
+          ${u.id!==ME.id?`<button class="btn small ${u.active?'danger':'ok'}" onclick="toggleUser('${u.id}',${!u.active})">${u.active?"Desativar":"Ativar"}</button>`:""}
+        </td></tr>`).join("")}
+    </table></div>`;
+}
+async function criarUsuario(){
+  const name=$("uName").value.trim(), email=$("uEmail").value.trim(), pass=$("uPass").value, role=$("uRole").value;
+  const { error } = await sb.rpc("ep_admin_create_user",{ p_email:email, p_password:pass, p_name:name, p_role:role });
+  if(error){ toast(error.message); return; }
+  audit("usuario_criado",{name,role});
+  toast("Conta criada — repasse e-mail e senha ao usuário"); renderUsuarios();
+}
+function modalSenha(uid,name){
+  openModal(`<h2>Redefinir senha</h2><p class="mut small">${esc(name)}</p>
+    <label>Nova senha (mín. 6)</label><input id="npass">
+    <div style="height:12px"></div><button class="btn primary block" onclick="resetSenha('${uid}')">Salvar nova senha</button>`);
+}
+async function resetSenha(uid){
+  const { error } = await sb.rpc("ep_admin_reset_password",{ p_user_id:uid, p_password:$("npass").value });
+  if(error){ toast(error.message); return; }
+  audit("senha_redefinida",{user_id:uid});
+  closeModal(); toast("Senha redefinida");
+}
+async function toggleUser(uid,active){
+  await sb.from("ep_profiles").update({active}).eq("id",uid);
+  audit(active?"usuario_ativado":"usuario_desativado",{user_id:uid});
+  renderUsuarios();
+}
+
+/* ---------- RELATÓRIOS ---------- */
+async function renderRelatorios(){
+  const el=$("view-relatorios");
+  const { data:evs } = await sb.from("ep_events").select("id,name,status").order("created_at",{ascending:false});
+  const { data:ops } = await sb.from("ep_profiles").select("id,name").order("name");
+  el.innerHTML = `<h2>Relatórios</h2>
+    <div class="card">
+      <label>Evento</label><select id="repEvent">${(evs||[]).map(e=>`<option value="${e.id}">${esc(e.name)} (${e.status})</option>`).join("")}</select>
+      <label>Operador (para relatório individual)</label><select id="repOp">${(ops||[]).map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join("")}</select>
+    </div>
+    <div class="card"><h3>Gerar</h3><div class="grid2">
+      <button class="btn" onclick="rel('financeiro','pdf')">Financeiro completo — PDF</button>
+      <button class="btn" onclick="rel('financeiro','xls')">Financeiro — Excel</button>
+      <button class="btn" onclick="rel('consolidado','pdf')">Consolidado do evento — PDF</button>
+      <button class="btn" onclick="rel('operador','pdf')">Individual do operador — PDF</button>
+      <button class="btn" onclick="rel('estoque','xls')">Estoque — Excel</button>
+      <button class="btn" onclick="rel('compras','xls')">Compras — Excel</button>
+      <button class="btn" onclick="rel('perdas','xls')">Perdas — Excel</button>
+      <button class="btn" onclick="rel('lucro','xls')">Lucro por produto — Excel</button>
+      <button class="btn" onclick="rel('vendas','xls')">Vendas detalhadas — Excel</button>
+      <button class="btn" onclick="rel('movimentacoes','xls')">Movimentações do sistema — Excel</button>
+    </div></div>`;
+}
+function csv(rows, filename){
+  const sep=";";
+  const content = "\uFEFF" + rows.map(r=>r.map(c=>{
+    const s=String(c??"").replace(/"/g,'""');
+    return /[;"\n]/.test(s)?`"${s}"`:s;
+  }).join(sep)).join("\r\n");
+  const blob = new Blob([content],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename+".csv"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+const money = v => (Number(v)||0).toFixed(2).replace(".", ",");
+async function rel(tipo, formato){
+  const eid=$("repEvent").value; if(!eid){ toast("Nenhum evento"); return; }
+  const { data:ev } = await sb.from("ep_events").select("*").eq("id",eid).single();
+  const D = await eventData(eid); const A = aggregate(D);
+  audit("relatorio_gerado",{tipo,formato,event_id:eid});
+  if(tipo==="consolidado"){ fechamentoGeral(eid); return; }
+  if(tipo==="financeiro"){
+    const lucroBruto=A.total-A.cmv, lucroLiq=lucroBruto-A.despesas, saidas=A.despesas+A.compras;
+    const rows=[["Relatório financeiro",ev.name],[],["Item","Valor (R$)"],
+      ["Total investido",money(ev.invested)],["Total faturado",money(A.total)],["CMV",money(A.cmv)],
+      ["Lucro bruto",money(lucroBruto)],["Despesas",money(A.despesas)],["Compras",money(A.compras)],
+      ["Lucro líquido",money(lucroLiq)],["Entradas",money(A.total)],["Saídas",money(saidas)],
+      ["Saldo final",money(A.total-saidas)],["Sangrias",money(A.totalSang)],[],
+      ["Forma de pagamento","Valor"],...METHODS.map(([k,l])=>[l,money(A.by[k])])];
+    if(formato==="xls"){ csv(rows,"financeiro-"+ev.name); return; }
+    $("printArea").innerHTML = `<h1>Relatório financeiro — ${esc(ev.name)}</h1><p>${fd(Date.now())}</p>
+      <table>${rows.slice(2).map(r=>r.length?`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join("")}</tr>`:"").join("")}</table>`;
+    window.print(); return;
+  }
+  if(tipo==="operador"){
+    const oid=$("repOp").value; const o=A.perOp[oid];
+    const regs=D.regs.filter(r=>r.operator_id===oid);
+    const sang=D.sang.filter(s=>regs.some(r=>r.id===s.register_id));
+    $("printArea").innerHTML = `<h1>Relatório do operador — ${esc(A.pname(oid))}</h1><p>${esc(ev.name)} · ${fd(Date.now())}</p>
+      <h2>Resumo</h2><table>
+      <tr><td>Vendas</td><td>${o?o.n:0}</td></tr><tr><td>Total vendido</td><td>${fmt(o?o.total:0)}</td></tr>
+      ${METHODS.map(([k,l])=>`<tr><td>${l}</td><td>${fmt(o?o.by[k]:0)}</td></tr>`).join("")}
+      <tr><td>Sangrias</td><td>${fmt(sang.reduce((s,x)=>s+Number(x.amount),0))}</td></tr></table>
+      <h2>Caixas</h2><table><tr><th>Abertura</th><th>Fundo</th><th>Fechamento</th><th>Esperado</th><th>Contado</th><th>Diferença</th><th>Justificativa</th></tr>
+      ${regs.map(r=>`<tr><td>${fdt(r.opened_at)}</td><td>${fmt(r.opening_cash)}</td><td>${r.closed_at?fdt(r.closed_at):"aberto"}</td>
+        <td>${r.expected_cash!=null?fmt(r.expected_cash):"—"}</td><td>${r.counted_cash!=null?fmt(r.counted_cash):"—"}</td>
+        <td>${r.difference!=null?fmt(r.difference):"—"}</td><td>${esc(r.justification||"")}</td></tr>`).join("")}</table>
+      <h2>Sangrias</h2><table><tr><th>Data/hora</th><th>Valor</th><th>Motivo</th><th>Responsável</th></tr>
+      ${sang.map(s=>`<tr><td>${fd(s.created_at)}</td><td>${fmt(s.amount)}</td><td>${esc(s.reason)}</td><td>${esc(s.responsible)}</td></tr>`).join("")}</table>`;
+    window.print(); return;
+  }
+  if(tipo==="estoque"){
+    const rows=[["Estoque — "+ev.name],[],["Produto","Inicial","Vendidos","Perdidos","Consumo interno","Restante"]];
+    const perdas=D.adjs.filter(a=>a.kind==="perda"), cons=D.adjs.filter(a=>a.kind==="consumo");
+    D.prods.forEach(p=>{
+      rows.push([p.name,p.stock_initial,(A.perProd[p.name]||{qty:0}).qty,
+        perdas.filter(a=>a.product_id===p.id).reduce((s,a)=>s+a.qty,0),
+        cons.filter(a=>a.product_id===p.id).reduce((s,a)=>s+a.qty,0), p.stock]);
+    });
+    csv(rows,"estoque-"+ev.name); return;
+  }
+  if(tipo==="compras"){
+    const rows=[["Compras e despesas — "+ev.name],[],["Data","Tipo","Descrição","Valor (R$)"],
+      ...D.exps.map(e=>[fd(e.created_at),e.kind,e.description,money(e.amount)])];
+    csv(rows,"compras-"+ev.name); return;
+  }
+  if(tipo==="perdas"){
+    const pn = id => (D.prods.find(p=>p.id===id)||{name:"?"}).name;
+    const rows=[["Perdas e consumo interno — "+ev.name],[],["Data","Tipo","Produto","Qtd","Motivo"],
+      ...D.adjs.filter(a=>a.kind==="perda"||a.kind==="consumo").map(a=>[fd(a.created_at),a.kind,pn(a.product_id),a.qty,a.reason||""])];
+    csv(rows,"perdas-"+ev.name); return;
+  }
+  if(tipo==="lucro"){
+    const rows=[["Lucro por produto — "+ev.name],[],["Produto","Qtd vendida","Faturamento (R$)","Custo (R$)","Lucro (R$)"],
+      ...Object.values(A.perProd).sort((a,b)=>(b.total-b.cost)-(a.total-a.cost))
+        .map(p=>[p.name,p.qty,money(p.total),money(p.cost),money(p.total-p.cost)])];
+    csv(rows,"lucro-produto-"+ev.name); return;
+  }
+  if(tipo==="vendas"){
+    const rows=[["Vendas — "+ev.name],[],["Código","Data/hora","Operador","Status","Total (R$)","Itens","Pagamentos"]];
+    D.sales.forEach(s=>rows.push([s.id.slice(0,8),fd(s.created_at),A.pname(s.operator_id),s.status,money(s.total),
+      (s.ep_sale_items||[]).map(i=>i.qty+"x "+i.product_name).join(" | "),
+      (s.ep_sale_payments||[]).map(p=>mlabel(p.method)+" "+money(p.amount)).join(" | ")]));
+    csv(rows,"vendas-"+ev.name); return;
+  }
+  if(tipo==="movimentacoes"){
+    const { data:logs } = await sb.from("ep_audit").select("*").eq("event_id",eid).order("created_at",{ascending:false}).limit(2000);
+    const pn = id => (D.profs.find(p=>p.id===id)||{name:"?"}).name;
+    const rows=[["Movimentações do sistema — "+ev.name],[],["Data/hora","Usuário","Ação","Detalhes"],
+      ...(logs||[]).map(l=>[fd(l.created_at),pn(l.user_id),l.action,JSON.stringify(l.details||{})])];
+    csv(rows,"movimentacoes-"+ev.name); return;
+  }
+}
+function expConsolidadoCSV(eid){ $("repEvent") && ($("repEvent").value = eid); closeModal(); go("relatorios"); setTimeout(()=>{ $("repEvent").value=eid; rel("financeiro","xls"); },400); }
+
+/* ---------- AUDITORIA ---------- */
+async function renderAuditoria(){
+  const el=$("view-auditoria");
+  const { data:logs } = await sb.from("ep_audit").select("*").order("created_at",{ascending:false}).limit(300);
+  const { data:profs } = await sb.from("ep_profiles").select("id,name");
+  const pn = id => ((profs||[]).find(p=>p.id===id)||{name:"?"}).name;
+  el.innerHTML = `<h2>Log de auditoria</h2>
+    <div class="card tbl-wrap"><table><tr><th>Data/hora</th><th>Usuário</th><th>Ação</th><th>Detalhes</th></tr>
+    ${(logs||[]).map(l=>`<tr><td class="num">${fdt(l.created_at)}</td><td>${esc(pn(l.user_id))}</td>
+      <td>${esc(l.action)}</td><td class="mut small">${esc(JSON.stringify(l.details||{}))}</td></tr>`).join("")||'<tr><td colspan="4" class="mut">Vazio.</td></tr>'}
+    </table></div>
+    <p class="mut small">Backup automático do banco: diário, feito pelo Supabase (plano do projeto).</p>`;
+}
+
+/* ---------- START ---------- */
+boot();
+
+</script>
+</body>
+</html>
