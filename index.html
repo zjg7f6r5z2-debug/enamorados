@@ -488,9 +488,32 @@ async function renderCaixa(){
     <div class="card"><div class="row"><h3 style="margin:0">Sangrias · ${fmt(st.totalSang)}</h3>
       <button class="btn small right" onclick="modalSangria()">+ Nova sangria</button></div>
       ${st.sangrias.map(s=>`<div class="row small" style="padding:6px 0;border-bottom:1px dashed var(--line)">
-        <span>${fdt(s.created_at)} · ${esc(s.reason)} · resp.: ${esc(s.responsible)}</span><b class="right num" style="color:var(--bad)">−${fmt(s.amount)}</b></div>`).join("") || `<p class="mut small">Nenhuma sangria.</p>`}
+        <span>${fdt(s.created_at)} · ${esc(s.reason)} · resp.: ${esc(s.responsible)}</span><b class="right num" style="color:var(--bad)">−${fmt(s.amount)}</b>
+        ${ME.role==="admin"?`<button class="btn small ghost" onclick='editSangria(${JSON.stringify(s).replace(/'/g,"&#39;")})'>✎</button>
+        <button class="btn small danger" onclick="delSangria('${s.id}')">✕</button>`:""}</div>`).join("") || `<p class="mut small">Nenhuma sangria.</p>`}
     </div>
     <button class="btn danger block" onclick="modalFechamento()">Fechar meu caixa</button>`;
+}
+function editSangria(s){
+  openModal(`<h2>Editar sangria</h2>
+    <label>Valor</label><input id="egVal" inputmode="decimal" value="${s.amount}">
+    <label>Motivo</label><input id="egMotivo" value="${esc(s.reason)}">
+    <label>Responsável</label><input id="egResp" value="${esc(s.responsible)}">
+    <div style="height:12px"></div>
+    <button class="btn primary block" onclick="salvarSangriaEdit('${s.id}')">Salvar alterações</button>`);
+}
+async function salvarSangriaEdit(id){
+  const v=N($("egVal").value), m=$("egMotivo").value.trim(), r=$("egResp").value.trim();
+  if(v<=0||!m||!r){ toast("Preencha valor, motivo e responsável"); return; }
+  const { error } = await sb.from("ep_sangrias").update({amount:v,reason:m,responsible:r}).eq("id",id);
+  if(error){ toast(error.message); return; }
+  audit("sangria_editada",{id,valor:v}); closeModal(); toast("Atualizado"); renderCaixa();
+}
+async function delSangria(id){
+  if(!confirm("Excluir esta sangria?")) return;
+  const { error } = await sb.from("ep_sangrias").delete().eq("id",id);
+  if(error){ toast(error.message); return; }
+  audit("sangria_excluida",{id}); toast("Sangria excluída"); renderCaixa();
 }
 function modalSangria(){
   openModal(`<h2>Sangria de caixa</h2>
@@ -705,7 +728,7 @@ async function renderPainel(){
         return `<tr><td>${esc(A.pname(r.operator_id))}</td>
         <td>${r.status==="aberto"?'<span class="tag ok">aberto</span>':`<span class="tag ${Math.abs(Number(r.difference))>=0.005?'bad':''}">fechado ${Number(r.difference)?fmt(r.difference):''}</span>`}</td>
         <td class="num">${o.n}</td><td class="num">${fmt(o.total)}</td>
-        <td>${r.status==="fechado"?`<button class="btn small" onclick="reabrirCaixa('${r.id}')">Reabrir</button>`:""}</td></tr>`; }).join("") || `<tr><td colspan="5" class="mut">Nenhum caixa aberto ainda.</td></tr>`}
+        <td>${r.status==="fechado"?`<button class="btn small" onclick="reabrirCaixa('${r.id}')">Reabrir</button>`:`<button class="btn small ghost" onclick="editFundo('${r.id}',${Number(r.opening_cash)})">Fundo</button>`}</td></tr>`; }).join("") || `<tr><td colspan="5" class="mut">Nenhum caixa aberto ainda.</td></tr>`}
     </table></div></div>
 
     <!-- Estoque -->
@@ -719,6 +742,15 @@ async function reabrirCaixa(rid){
   if(error){ toast(error.message); return; }
   audit("reabertura_caixa",{register_id:rid});
   toast("Caixa reaberto"); renderPainel();
+}
+function editFundo(rid,cur){
+  openModal(`<h2>Fundo inicial do caixa</h2><label>Valor (R$)</label><input id="fnVal" inputmode="decimal" value="${cur}">
+    <div style="height:12px"></div><button class="btn primary block" onclick="salvarFundo('${rid}')">Salvar</button>`);
+}
+async function salvarFundo(rid){
+  const { error } = await sb.from("ep_registers").update({ opening_cash: N($("fnVal").value) }).eq("id",rid);
+  if(error){ toast(error.message); return; }
+  audit("fundo_editado",{register_id:rid}); closeModal(); toast("Fundo atualizado"); renderPainel();
 }
 
 /* ---------- EVENTO (admin) ---------- */
@@ -824,6 +856,7 @@ async function renderProdutos(){
   if(!EVENT){ el.innerHTML=`<div class="card mut">Crie um evento primeiro.</div>`; return; }
   await loadProducts();
   const { data:exps } = await sb.from("ep_expenses").select("*").eq("event_id",EVENT.id).order("created_at",{ascending:false});
+  window._EXPS = exps||[];
   const { data:adjs } = await sb.from("ep_stock_adjustments").select("*").eq("event_id",EVENT.id).order("created_at",{ascending:false}).limit(20);
   const pname = id => (PRODUCTS.find(p=>p.id===id)||{name:"?"}).name;
   el.innerHTML = `
@@ -842,16 +875,56 @@ async function renderProdutos(){
         <td class="num">${fmt(p.price)}</td><td class="num">${fmt(p.cost)}</td>
         <td class="num" style="color:${p.stock<=p.min_stock?'var(--bad)':'inherit'}">${p.stock}</td>
         <td class="num">${p.min_stock}</td>
-        <td><button class="btn small" onclick="modalProduto('${p.id}')">Editar</button></td></tr>`).join("") || `<tr><td colspan="6" class="mut">Nenhum produto.</td></tr>`}
+        <td><button class="btn small" onclick="modalProduto('${p.id}')">Editar</button>
+        <button class="btn small danger" onclick="delProduto('${p.id}','${esc(p.name)}')">Excluir</button></td></tr>`).join("") || `<tr><td colspan="6" class="mut">Nenhum produto.</td></tr>`}
     </table></div>
     <div class="card"><h3>Compras & despesas</h3>
       ${(exps||[]).map(e=>`<div class="row small" style="padding:5px 0;border-bottom:1px dashed var(--line)">
-        <span>${fdt(e.created_at)} · <span class="tag">${e.kind}</span> ${esc(e.description)}</span><b class="right num">−${fmt(e.amount)}</b></div>`).join("")||'<p class="mut small">Nenhum lançamento.</p>'}
+        <span>${fdt(e.created_at)} · <span class="tag">${e.kind}</span> ${esc(e.description)}</span>
+        <b class="right num">−${fmt(e.amount)}</b>
+        <button class="btn small ghost" onclick="editDespesa('${e.id}')">✎</button>
+        <button class="btn small danger" onclick="delDespesa('${e.id}')">✕</button></div>`).join("")||'<p class="mut small">Nenhum lançamento.</p>'}
     </div>
     <div class="card"><h3>Últimos ajustes de estoque</h3>
       ${(adjs||[]).map(a=>`<div class="row small" style="padding:5px 0;border-bottom:1px dashed var(--line)">
-        <span>${fdt(a.created_at)} · <span class="tag">${a.kind}</span> ${esc(pname(a.product_id))} ${a.qty} un ${a.reason?("· "+esc(a.reason)):""}</span></div>`).join("")||'<p class="mut small">Nenhum ajuste.</p>'}
+        <span>${fdt(a.created_at)} · <span class="tag">${a.kind}</span> ${esc(pname(a.product_id))} ${a.qty} un ${a.reason?("· "+esc(a.reason)):""}</span>
+        <button class="btn small danger right" onclick="delAjuste('${a.id}')">✕</button></div>`).join("")||'<p class="mut small">Nenhum ajuste.</p>'}
     </div>`;
+}
+window._EXPS = [];
+function editDespesa(id){
+  const e = (window._EXPS||[]).find(x=>x.id===id); if(!e) return;
+  openModal(`<h2>Editar lançamento</h2>
+    <label>Tipo</label><select id="edKind"><option value="compra" ${e.kind==="compra"?"selected":""}>Compra (mercadoria)</option><option value="despesa" ${e.kind==="despesa"?"selected":""}>Despesa</option></select>
+    <label>Descrição</label><input id="edDesc" value="${esc(e.description)}">
+    <label>Valor</label><input id="edVal" inputmode="decimal" value="${e.amount}">
+    <div style="height:12px"></div>
+    <button class="btn primary block" onclick="salvarDespesaEdit('${id}')">Salvar alterações</button>`);
+}
+async function salvarDespesaEdit(id){
+  const v=N($("edVal").value), d=$("edDesc").value.trim();
+  if(v<=0||!d){ toast("Preencha descrição e valor"); return; }
+  const { error } = await sb.from("ep_expenses").update({ kind:$("edKind").value, description:d, amount:v }).eq("id",id);
+  if(error){ toast(error.message); return; }
+  audit("despesa_editada",{id,valor:v}); closeModal(); toast("Atualizado"); renderProdutos();
+}
+async function delDespesa(id){
+  if(!confirm("Excluir este lançamento?")) return;
+  const { error } = await sb.from("ep_expenses").delete().eq("id",id);
+  if(error){ toast(error.message); return; }
+  audit("despesa_excluida",{id}); toast("Excluído"); renderProdutos();
+}
+async function delAjuste(id){
+  if(!confirm("Excluir este ajuste? O efeito no estoque será revertido.")) return;
+  const { error } = await sb.from("ep_stock_adjustments").delete().eq("id",id);
+  if(error){ toast(error.message); return; }
+  audit("ajuste_excluido",{id}); toast("Ajuste excluído e estoque revertido"); renderProdutos();
+}
+async function delProduto(id,name){
+  if(!confirm(`Excluir o produto "${name}"? Isso remove o item do catálogo do evento.`)) return;
+  const { error } = await sb.from("ep_products").delete().eq("id",id);
+  if(error){ toast("Não foi possível excluir (pode haver vendas ligadas a ele). "+error.message); return; }
+  audit("produto_excluido",{id,name}); toast("Produto excluído"); renderProdutos();
 }
 function modalProduto(pid){
   const p = PRODUCTS.find(x=>x.id===pid) || {name:"",price:"",cost:0,stock_initial:0,stock:0,min_stock:5,active:true};
@@ -947,11 +1020,28 @@ function filterVendas(){
       ${s.status==="cancelada"?'<span class="tag bad">cancelada</span>':""}
       <span class="mut small">#${s.id.slice(0,8)} · ${fdt(s.created_at)} · ${esc(window._pn(s.operator_id))}</span>
       ${s.status==="ok"?`<button class="btn small danger right" onclick="modalCancelar('${s.id}')">Cancelar</button>`:""}
+      ${ME.role==="admin"?`<button class="btn small ghost ${s.status==="ok"?"":"right"}" onclick="delVenda('${s.id}','${s.status}')">Excluir</button>`:""}
     </div>
     <div class="mut small">${(s.ep_sale_items||[]).map(i=>`${i.qty}x ${esc(i.product_name)}`).join(", ")}
       · ${(s.ep_sale_payments||[]).map(p=>mlabel(p.method)).join(" + ")}
       ${s.cancel_reason?` · motivo: ${esc(s.cancel_reason)}`:""}</div>
   </div>`).join("") || `<div class="card mut">Nenhuma venda encontrada.</div>`;
+}
+async function delVenda(sid,status){
+  if(!confirm("Excluir esta venda em definitivo? Não dá pra desfazer.")) return;
+  // devolve o estoque só se a venda ainda estava ativa (cancelada já teve estoque estornado)
+  if(status==="ok"){
+    const s = SALES_CACHE.find(x=>x.id===sid);
+    for(const i of (s?.ep_sale_items||[])){
+      if(i.product_id){
+        const p = PRODUCTS.find(x=>x.id===i.product_id);
+        if(p) await sb.from("ep_products").update({ stock: Number(p.stock)+Number(i.qty) }).eq("id",i.product_id);
+      }
+    }
+  }
+  const { error } = await sb.from("ep_sales").delete().eq("id",sid);
+  if(error){ toast(error.message); return; }
+  audit("venda_excluida",{sale_id:sid}); toast("Venda excluída"); await loadProducts(); renderVendas();
 }
 function modalCancelar(sid){
   openModal(`<h2>Cancelar venda</h2>
