@@ -57,11 +57,11 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
   border-bottom:1px solid var(--line);padding:10px 14px;display:flex;align-items:center;gap:10px}
 .brand{font-weight:800;letter-spacing:.02em}
 .brand b{color:var(--brand)}
-#nav{position:sticky;top:49px;z-index:19;display:flex;gap:6px;overflow-x:auto;padding:8px 12px;
+#nav{position:sticky;top:49px;z-index:19;display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:9px 12px;
   background:var(--bg);border-bottom:1px solid var(--line);scrollbar-width:none}
 #nav::-webkit-scrollbar{display:none}
-.navbtn{white-space:nowrap;border:1px solid var(--line);background:transparent;color:var(--mut);
-  border-radius:99px;padding:8px 14px;cursor:pointer;font-weight:600;font-size:13.5px}
+.navbtn{flex:0 0 auto;white-space:nowrap;border:1px solid var(--line);background:transparent;color:var(--mut);
+  border-radius:99px;padding:9px 16px;cursor:pointer;font-weight:600;font-size:14px}
 .navbtn.on{background:var(--brand);border-color:var(--brand);color:var(--brand-dk)}
 main{max-width:1080px;margin:0 auto;padding:14px 14px 90px}
 .view{display:none}.view.on{display:block}
@@ -117,6 +117,18 @@ main{max-width:1080px;margin:0 auto;padding:14px 14px 90px}
   #printArea h1{font-size:18px} #printArea h2{font-size:14px;margin-top:14px}
   #printArea table{width:100%;border-collapse:collapse}
   #printArea th,#printArea td{border:1px solid #999;padding:4px 6px;text-align:left;color:#000}
+}
+/* Mobile: evita layout estourado e nav bugada */
+@media(max-width:560px){
+  #topbar{gap:8px;padding:9px 12px}
+  .brand{font-size:15px;line-height:1.15}
+  #topbar #topEvent{display:none}
+  #topUser{font-size:11px;max-width:34vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  main{padding:12px 12px 90px}
+  .grid2,.grid3{grid-template-columns:1fr}
+  h2{font-size:20px}
+  #totalBig{font-size:22px}
+  .kpi .v{font-size:18px}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -245,10 +257,16 @@ async function boot(){
   syncQueue();
 }
 
+const EVENT_NAME = "Encontro de Namorados";
 async function loadEvent(){
-  const { data } = await sb.from("ep_events").select("*").eq("status","aberto").order("created_at",{ascending:false}).limit(1);
+  let { data } = await sb.from("ep_events").select("*").eq("status","aberto").order("created_at",{ascending:false}).limit(1);
   EVENT = (data && data[0]) || null;
-  $("topEvent").textContent = EVENT ? EVENT.name : "Nenhum evento aberto";
+  // App dedicado a um único evento: se o admin entrar e não houver evento, cria automaticamente.
+  if(!EVENT && ME && ME.role==="admin"){
+    const ins = await sb.from("ep_events").insert({ name:EVENT_NAME, created_by:ME.id }).select("*").single();
+    if(!ins.error) EVENT = ins.data;
+  }
+  $("topEvent").textContent = EVENT ? "Ativo" : "Sem evento";
   if(EVENT){
     await loadProducts();
     const { data:regs } = await sb.from("ep_registers").select("*").eq("event_id",EVENT.id).eq("operator_id",ME.id).eq("status","aberto").limit(1);
@@ -264,7 +282,7 @@ async function loadProducts(){
 
 /* ---------- NAV ---------- */
 const TABS_OP = [["pdv","Vender"],["caixa","Meu caixa"]];
-const TABS_ADM = [["painel","Painel"],["pdv","Vender"],["caixa","Meu caixa"],["evento","Evento"],["produtos","Produtos"],["vendas","Vendas"],["usuarios","Usuários"],["relatorios","Relatórios"],["auditoria","Auditoria"]];
+const TABS_ADM = [["painel","Painel"],["pdv","Vender"],["caixa","Meu caixa"],["produtos","Produtos"],["vendas","Vendas"],["usuarios","Usuários"],["relatorios","Relatórios"],["auditoria","Auditoria"]];
 function buildNav(){
   const tabs = ME.role==="admin" ? TABS_ADM : TABS_OP;
   $("nav").innerHTML = tabs.map(t=>`<button class="navbtn" id="nav-${t[0]}" onclick="go('${t[0]}')">${t[1]}</button>`).join("");
@@ -276,7 +294,7 @@ function go(v){
   const nb=$("nav-"+v); if(nb) nb.classList.add("on");
   $("cartBar").style.display = (v==="pdv" && REG) ? "block" : "none";
   clearInterval(POLL);
-  const R = { pdv:renderPDV, caixa:renderCaixa, painel:renderPainel, evento:renderEvento, produtos:renderProdutos, vendas:renderVendas, usuarios:renderUsuarios, relatorios:renderRelatorios, auditoria:renderAuditoria };
+  const R = { pdv:renderPDV, caixa:renderCaixa, painel:renderPainel, evento:renderRelatorios, produtos:renderProdutos, vendas:renderVendas, usuarios:renderUsuarios, relatorios:renderRelatorios, auditoria:renderAuditoria };
   (R[v]||(()=>{}))();
   if(v==="painel") POLL = setInterval(renderPainel, 10000);
 }
@@ -922,11 +940,15 @@ async function toggleUser(uid,active){
 /* ---------- RELATÓRIOS ---------- */
 async function renderRelatorios(){
   const el=$("view-relatorios");
-  const { data:evs } = await sb.from("ep_events").select("id,name,status").order("created_at",{ascending:false});
+  if(!EVENT){ el.innerHTML=`<div class="card mut">Nenhum evento ativo.</div>`; return; }
   const { data:ops } = await sb.from("ep_profiles").select("id,name").order("name");
   el.innerHTML = `<h2>Relatórios</h2>
+    <select id="repEvent" style="display:none"><option value="${EVENT.id}" selected></option></select>
+    <div class="card"><h3>Fechamento geral</h3>
+      <p class="mut small">Relatório consolidado de tudo (financeiro, estoque e operadores).</p>
+      <button class="btn primary block" onclick="fechamentoGeral('${EVENT.id}')">Gerar fechamento geral</button>
+    </div>
     <div class="card">
-      <label>Evento</label><select id="repEvent">${(evs||[]).map(e=>`<option value="${e.id}">${esc(e.name)} (${e.status})</option>`).join("")}</select>
       <label>Operador (para relatório individual)</label><select id="repOp">${(ops||[]).map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join("")}</select>
     </div>
     <div class="card"><h3>Gerar</h3><div class="grid2">
