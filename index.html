@@ -74,6 +74,8 @@ main{max-width:1080px;margin:0 auto;padding:14px 14px 240px}
   letter-spacing:.04em;border:2px solid var(--brand);box-shadow:0 0 0 4px var(--brand-soft)}
 .lockup .word{font-weight:800;letter-spacing:.16em;font-size:14px;text-transform:uppercase;line-height:1.6}
 .lockup .stroke{width:40px;height:2px;background:var(--brand);border-radius:2px;margin:10px auto 0}
+#verFooter{text-align:center;font-size:11px;color:var(--mut);letter-spacing:.06em;margin:22px 0 30px}
+#verFooter b{color:var(--brand);font-weight:800}
 .lockup .lema{font-size:13px;color:var(--brand);font-weight:700;letter-spacing:.03em;margin-top:10px}
 /* PDV */
 .pdvgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
@@ -214,6 +216,7 @@ svg text{font-family:inherit}
     </div>
     <div id="authMsg" class="small" style="color:var(--bad);margin-top:10px"></div>
   </div>
+  <div id="verFooter">Versão <b>1.0</b></div>
 </div>
 
 <!-- APP -->
@@ -224,7 +227,6 @@ svg text{font-family:inherit}
     <span class="right mut small" id="topUser"></span>
     <button class="btn small ghost" onclick="doLogout()">Sair</button>
   </div>
-  <div id="verbar" style="text-align:center;font-size:10px;color:var(--mut);letter-spacing:.06em;padding:3px 0;border-bottom:1px solid var(--line)">versão 17/08 · 15h</div>
   <div id="nav"></div>
   <main>
     <div id="view-pdv" class="view"></div>
