@@ -342,6 +342,7 @@ function go(v){
   $("view-"+v).classList.add("on");
   const nb=$("nav-"+v); if(nb) nb.classList.add("on");
   $("cartBar").style.display = (v==="pdv" && REG) ? "block" : "none";
+  ajustaEspacoCarrinho();
   clearInterval(POLL);
   const R = { pdv:renderPDV, caixa:renderCaixa, painel:renderPainel, evento:renderRelatorios, produtos:renderProdutos, vendas:renderVendas, usuarios:renderUsuarios, relatorios:renderRelatorios, auditoria:renderAuditoria };
   (R[v]||(()=>{}))();
@@ -426,6 +427,7 @@ function renderPDV(){
       <button class="btn primary block" onclick="abrirCaixa()">Abrir caixa e começar a vender</button>
     </div>`;
     $("cartBar").style.display="none";
+    ajustaEspacoCarrinho();
     return;
   }
   el.innerHTML = `<div class="row" style="margin-bottom:10px">
@@ -472,7 +474,23 @@ function renderCart(){
       <button class="btn small ghost" onclick="splitPay()" ${items.length?'':'disabled'}>Dividir pgto</button>
       <button class="btn primary right" style="min-width:170px" onclick="concluirVenda()" ${items.length&&PAY?'':'disabled'}>CONCLUIR VENDA</button>
     </div>`;
+  ajustaEspacoCarrinho();
 }
+/* A barra do carrinho é fixa no rodapé e muda de altura conforme os itens.
+   Reserva o espaço equivalente no fim da página para não cobrir os últimos produtos. */
+function ajustaEspacoCarrinho(){
+  const bar = $("cartBar"), m = document.querySelector("main");
+  if(!m) return;
+  requestAnimationFrame(()=>{
+    const vis = bar && bar.style.display !== "none" && bar.offsetParent !== null;
+    const h = vis ? bar.offsetHeight : 0;
+    m.style.paddingBottom = (h + 28) + "px";
+    const t = $("toast"); if(t) t.style.bottom = (h + 16) + "px";
+  });
+}
+window.addEventListener("resize", ajustaEspacoCarrinho);
+window.addEventListener("orientationchange", ajustaEspacoCarrinho);
+
 function setPay(k){ PAY=k; renderCart(); }
 function clearCart(){ CART={}; PAY=null; renderCart(); }
 function splitPay(){
@@ -559,7 +577,7 @@ async function abrirCaixa(){
   }).select("*").single();
   if(error){ toast("Erro ao abrir caixa: "+error.message); return; }
   REG = data; audit("abertura_caixa",{register_id:REG.id,fundo:cash});
-  toast("Caixa aberto"); renderPDV(); $("cartBar").style.display="block";
+  toast("Caixa aberto"); renderPDV(); $("cartBar").style.display="block"; ajustaEspacoCarrinho();
 }
 async function regStats(regId){
   const { data:sales } = await sb.from("ep_sales")
