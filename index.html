@@ -76,7 +76,16 @@ main{max-width:1080px;margin:0 auto;padding:14px 14px 90px}
 .lockup .stroke{width:40px;height:2px;background:var(--brand);border-radius:2px;margin:10px auto 0}
 .lockup .lema{font-size:13px;color:var(--brand);font-weight:700;letter-spacing:.03em;margin-top:10px}
 /* PDV */
-#pdvGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.pdvgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.cathead{display:flex;align-items:center;gap:10px;margin:16px 0 8px}
+.cathead:first-child{margin-top:2px}
+.cathead .ct{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--brand);white-space:nowrap}
+.cathead .cl{flex:1;height:1px;background:var(--line)}
+.ordrow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.ordrow .on{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.arrow{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);cursor:pointer;font-weight:800;color:var(--txt);flex:0 0 auto}
+.arrow:disabled{opacity:.3;cursor:default}
+.calcbox{background:var(--brand-soft);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;margin-top:8px}
 .pbtn{border:1px solid var(--line);background:var(--panel);border-radius:var(--r);padding:0;overflow:hidden;
   cursor:pointer;text-align:left;display:flex;flex-direction:column;color:var(--txt)}
 .pbtn:active{transform:scale(.97);border-color:var(--brand)}
@@ -86,7 +95,7 @@ main{max-width:1080px;margin:0 auto;padding:14px 14px 90px}
 .pbtn .ps{font-size:11px;color:var(--mut)}
 .pbtn.low .ps{color:var(--bad);font-weight:700}
 .pbtn.out{opacity:.45;pointer-events:none}
-.pimg{width:100%;height:96px;object-fit:cover;display:block;background:var(--panel2);border-bottom:1px solid var(--line)}
+.pimg{width:100%;aspect-ratio:1/1;height:auto;object-fit:cover;display:block;background:var(--panel2);border-bottom:1px solid var(--line)}
 .pimg.ph{display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px;color:var(--mut);
   background:var(--brand-soft);letter-spacing:.02em}
 .thumb{width:38px;height:38px;border-radius:8px;object-fit:cover;background:var(--panel2);border:1px solid var(--line);display:block}
@@ -148,8 +157,7 @@ svg text{font-family:inherit}
   #totalBig{font-size:22px}
   .hero-v{font-size:30px}
   .kpi .v{font-size:18px}
-  #pdvGrid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
-  .pimg{height:86px}
+  .pdvgrid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -227,7 +235,7 @@ const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 const IMG_BUCKET = "ep-produtos";
 
-let ME = null, EVENT = null, REG = null, PRODUCTS = [], CART = {}, PAY = null, LAST_SALE = null;
+let ME = null, EVENT = null, REG = null, PRODUCTS = [], CATEGORIES = [], CART = {}, PAY = null, LAST_SALE = null;
 let POLL = null, ADMIN_EVENT_ID = null;
 
 const $ = id => document.getElementById(id);
@@ -292,16 +300,33 @@ async function loadEvent(){
   }
   $("topEvent").textContent = EVENT ? "Ativo" : "Sem evento";
   if(EVENT){
+    await loadCategories();
     await loadProducts();
     const { data:regs } = await sb.from("ep_registers").select("*").eq("event_id",EVENT.id).eq("operator_id",ME.id).eq("status","aberto").limit(1);
     REG = (regs && regs[0]) || null;
-  } else { REG=null; PRODUCTS=[]; }
+  } else { REG=null; PRODUCTS=[]; CATEGORIES=[]; }
 }
 async function loadProducts(){
   if(!EVENT) return;
-  const { data } = await sb.from("ep_products").select("*").eq("event_id",EVENT.id).order("name");
+  const { data } = await sb.from("ep_products").select("*").eq("event_id",EVENT.id).order("sort_order",{ascending:true}).order("name",{ascending:true});
   if(data){ PRODUCTS = data; localStorage.setItem("ep_products_"+EVENT.id, JSON.stringify(data)); }
   else { PRODUCTS = JSON.parse(localStorage.getItem("ep_products_"+EVENT.id)||"[]"); }
+}
+async function loadCategories(){
+  if(!EVENT) return;
+  const { data } = await sb.from("ep_categories").select("*").eq("event_id",EVENT.id).order("sort_order",{ascending:true}).order("name",{ascending:true});
+  if(data){ CATEGORIES = data; localStorage.setItem("ep_cats_"+EVENT.id, JSON.stringify(data)); }
+  else { CATEGORIES = JSON.parse(localStorage.getItem("ep_cats_"+EVENT.id)||"[]"); }
+}
+const catName = id => (CATEGORIES.find(c=>c.id===id)||{}).name || null;
+/* Agrupa produtos pelas categorias, na ordem definida pelo admin.
+   Produtos sem categoria vão para um grupo "Outros" no fim. */
+function groupByCat(list){
+  const ord = p => Number(p.sort_order)||0;
+  const groups = CATEGORIES.map(c=>({ id:c.id, name:c.name, items:list.filter(p=>p.category_id===c.id).sort((a,b)=>ord(a)-ord(b)) }));
+  const soltos = list.filter(p=>!p.category_id || !CATEGORIES.some(c=>c.id===p.category_id)).sort((a,b)=>ord(a)-ord(b));
+  if(soltos.length) groups.push({ id:null, name: CATEGORIES.length ? "Outros" : null, items:soltos });
+  return groups.filter(g=>g.items.length);
 }
 
 /* ---------- NAV ---------- */
@@ -409,7 +434,7 @@ function renderPDV(){
       <button class="btn small right" onclick="go('caixa')">Meu caixa →</button>
     </div>
     <div id="pdvGrid"></div>`;
-  $("pdvGrid").innerHTML = PRODUCTS.filter(p=>p.active).map(p=>{
+  const cardHTML = p => {
     const low = p.stock<=p.min_stock, out = p.stock<=0;
     return `<button class="pbtn ${low?'low':''} ${out?'out':''}" onclick="addCart('${p.id}')">
       ${prodImgHTML(p)}
@@ -419,7 +444,12 @@ function renderPDV(){
         <span class="ps num">estoque ${p.stock}</span>
       </span>
     </button>`;
-  }).join("") || `<div class="card mut">Nenhum produto cadastrado neste evento.</div>`;
+  };
+  const groups = groupByCat(PRODUCTS.filter(p=>p.active));
+  $("pdvGrid").innerHTML = groups.map(g=>
+    `${g.name?`<div class="cathead"><span class="ct">${esc(g.name)}</span><span class="cl"></span></div>`:""}
+     <div class="pdvgrid">${g.items.map(cardHTML).join("")}</div>`
+  ).join("") || `<div class="card mut">Nenhum produto cadastrado neste evento.</div>`;
   $("cartBar").style.display="block";
   renderCart();
 }
@@ -942,6 +972,7 @@ async function fechamentoGeral(eid){
 async function renderProdutos(){
   const el=$("view-produtos");
   if(!EVENT){ el.innerHTML=`<div class="card mut">Crie um evento primeiro.</div>`; return; }
+  await loadCategories();
   await loadProducts();
   const { data:exps } = await sb.from("ep_expenses").select("*").eq("event_id",EVENT.id).order("created_at",{ascending:false});
   window._EXPS = exps||[];
@@ -951,22 +982,36 @@ async function renderProdutos(){
     <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Produtos & Estoque</h2>
       <button class="btn small primary right" onclick="modalProduto()">+ Produto</button></div>
     <div class="row" style="margin-bottom:10px">
+      <button class="btn small" onclick="modalCategorias()">Categorias</button>
+      <button class="btn small" onclick="modalOrdenar()">Ordenar grade</button>
       <button class="btn small" onclick="modalConferencia('abertura')">Conferência de abertura</button>
       <button class="btn small" onclick="modalConferencia('encerramento')">Conferência de encerramento</button>
       <button class="btn small" onclick="modalAjuste()">Perda / consumo / entrada</button>
       <button class="btn small" onclick="modalDespesa()">+ Compra / despesa</button>
     </div>
-    <div class="card tbl-wrap"><table>
-      <tr><th>Foto</th><th>Produto</th><th>Preço</th><th>Custo</th><th>Estoque</th><th>Mín.</th><th></th></tr>
-      ${PRODUCTS.map(p=>`<tr>
-        <td style="width:46px">${prodImgHTML(p,"thumb")}</td>
-        <td>${esc(p.name)}${p.active?"":' <span class="tag bad">inativo</span>'}</td>
-        <td class="num">${fmt(p.price)}</td><td class="num">${fmt(p.cost)}</td>
-        <td class="num" style="color:${p.stock<=p.min_stock?'var(--bad)':'inherit'}">${p.stock}</td>
-        <td class="num">${p.min_stock}</td>
-        <td><button class="btn small" onclick="modalProduto('${p.id}')">Editar</button>
-        <button class="btn small danger" onclick="delProduto('${p.id}','${esc(p.name)}')">Excluir</button></td></tr>`).join("") || `<tr><td colspan="7" class="mut">Nenhum produto.</td></tr>`}
-    </table></div>
+    ${groupByCat(PRODUCTS).map(g=>`
+      <div class="card tbl-wrap">
+        <div class="row" style="margin-bottom:6px">
+          <b style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--brand)">${esc(g.name||"Todos os produtos")}</b>
+          <span class="right mut small">${g.items.length} ${g.items.length===1?"item":"itens"}</span>
+        </div>
+        <table>
+        <tr><th style="width:70px">Ordem</th><th>Foto</th><th>Produto</th><th>Preço</th><th>Custo</th><th>Margem</th><th>Estoque</th><th>Mín.</th><th></th></tr>
+        ${g.items.map((p,i)=>`<tr>
+          <td style="white-space:nowrap">
+            <button class="btn small" onclick="moveProduto('${p.id}',-1)" ${i===0?"disabled":""} title="Subir">↑</button>
+            <button class="btn small" onclick="moveProduto('${p.id}',1)" ${i===g.items.length-1?"disabled":""} title="Descer">↓</button>
+          </td>
+          <td style="width:46px">${prodImgHTML(p,"thumb")}</td>
+          <td>${esc(p.name)}${p.active?"":' <span class="tag bad">inativo</span>'}</td>
+          <td class="num">${fmt(p.price)}</td><td class="num">${fmt(p.cost)}</td>
+          <td class="num">${markupPct(p)===null?'<span class="mut">—</span>':markupPct(p).toFixed(0)+"%"}</td>
+          <td class="num" style="color:${p.stock<=p.min_stock?'var(--bad)':'inherit'}">${p.stock}</td>
+          <td class="num">${p.min_stock}</td>
+          <td><button class="btn small" onclick="modalProduto('${p.id}')">Editar</button>
+          <button class="btn small danger" onclick="delProduto('${p.id}','${esc(p.name)}')">Excluir</button></td></tr>`).join("")}
+        </table>
+      </div>`).join("") || `<div class="card mut">Nenhum produto.</div>`}
     <div class="card"><h3>Compras & despesas</h3>
       ${(exps||[]).map(e=>`<div class="row small" style="padding:5px 0;border-bottom:1px dashed var(--line)">
         <span>${fdt(e.created_at)} · <span class="tag">${e.kind}</span> ${esc(e.description)}</span>
@@ -1015,27 +1060,190 @@ async function delProduto(id,name){
   if(error){ toast("Não foi possível excluir (pode haver vendas ligadas a ele). "+error.message); return; }
   audit("produto_excluido",{id,name}); toast("Produto excluído"); renderProdutos();
 }
+/* ---------- MARGEM DE LUCRO ---------- */
+/* markup = lucro sobre o CUSTO: preço = custo × (1 + m/100)
+   margem sobre a VENDA: preço = custo ÷ (1 − m/100)  */
+function markupPct(p){
+  const c = Number(p.cost)||0, v = Number(p.price)||0;
+  if(c<=0) return null;
+  return (v-c)/c*100;
+}
+function precoPorMargem(cost, m, base){
+  cost = Number(cost)||0; m = Number(m)||0;
+  if(cost<=0) return 0;
+  if(base==="venda"){
+    if(m>=100) return 0;
+    return cost/(1-m/100);
+  }
+  return cost*(1+m/100);
+}
+function recalcPreco(){
+  const c = N($("prCost").value), m = N($("prMargem").value), base = $("prMargemBase").value;
+  if(c<=0){ atualizaCalcBox(); return; }
+  const v = precoPorMargem(c,m,base);
+  $("prPrice").value = (Math.round(v*100)/100).toFixed(2).replace(".",",");
+  atualizaCalcBox();
+}
+function recalcMargem(){
+  const c = N($("prCost").value), v = N($("prPrice").value), base = $("prMargemBase").value;
+  if(c>0 && v>0){
+    const m = base==="venda" ? (v-c)/v*100 : (v-c)/c*100;
+    $("prMargem").value = (Math.round(m*10)/10).toString().replace(".",",");
+  }
+  atualizaCalcBox();
+}
+function atualizaCalcBox(){
+  const box = $("prCalc"); if(!box) return;
+  const c = N($("prCost").value), v = N($("prPrice").value);
+  if(c<=0){ box.innerHTML = `<span class="mut">Informe o custo unitário para calcular a margem automaticamente.</span>`; return; }
+  if(v<=0){ box.innerHTML = `<span class="mut">Informe a margem desejada — o preço é calculado sozinho.</span>`; return; }
+  const lucro = v-c;
+  const sobreCusto = lucro/c*100, sobreVenda = lucro/v*100;
+  box.innerHTML = `Lucro de <span class="num">${fmt(lucro)}</span> por unidade · <span class="num">${sobreCusto.toFixed(1)}%</span> sobre o custo · <span class="num">${sobreVenda.toFixed(1)}%</span> sobre a venda`;
+}
+
+/* ---------- ORDEM DOS PRODUTOS NA GRADE ---------- */
+async function renumerarGrupo(items){
+  const ups = items.map((p,i)=> sb.from("ep_products").update({ sort_order:(i+1)*10 }).eq("id",p.id));
+  const res = await Promise.all(ups);
+  const err = res.find(r=>r.error);
+  if(err){ toast("Não deu para salvar a ordem: "+err.error.message); return false; }
+  return true;
+}
+async function moveProduto(pid, dir, inModal){
+  const p = PRODUCTS.find(x=>x.id===pid); if(!p) return;
+  const g = groupByCat(PRODUCTS).find(g=>g.items.some(x=>x.id===pid)); if(!g) return;
+  const items = g.items.slice();
+  const i = items.findIndex(x=>x.id===pid), j = i+dir;
+  if(j<0 || j>=items.length) return;
+  items.splice(j,0,items.splice(i,1)[0]);
+  if(!await renumerarGrupo(items)) return;
+  audit("produto_reordenado",{id:pid,dir});
+  await loadProducts();
+  if(inModal) modalOrdenar(); else renderProdutos();
+}
+function modalOrdenar(){
+  const groups = groupByCat(PRODUCTS);
+  openModal(`<h2>Ordem na grade de vendas</h2>
+    <p class="mut small">Use as setas para mover. A grade do PDV segue exatamente esta ordem, categoria por categoria.</p>
+    ${groups.map(g=>`
+      <div class="cathead"><span class="ct">${esc(g.name||"Todos os produtos")}</span><span class="cl"></span></div>
+      ${g.items.map((p,i)=>`<div class="ordrow">
+        <span class="on">${esc(p.name)}${p.active?"":' <span class="tag bad">inativo</span>'}</span>
+        <button class="arrow" onclick="moveProduto('${p.id}',-1,true)" ${i===0?"disabled":""}>↑</button>
+        <button class="arrow" onclick="moveProduto('${p.id}',1,true)" ${i===g.items.length-1?"disabled":""}>↓</button>
+      </div>`).join("")}`).join("") || `<p class="mut">Nenhum produto cadastrado.</p>`}
+    <div style="height:14px"></div>
+    <button class="btn primary block" onclick="closeModal();renderProdutos()">Concluir</button>`);
+}
+
+/* ---------- CATEGORIAS ---------- */
+function modalCategorias(){
+  openModal(`<h2>Categorias</h2>
+    <p class="mut small">A grade de vendas é separada por categoria, na ordem abaixo. Produtos sem categoria aparecem em “Outros”, no fim.</p>
+    ${CATEGORIES.map((c,i)=>{
+      const n = PRODUCTS.filter(p=>p.category_id===c.id).length;
+      return `<div class="ordrow">
+        <span class="on">${esc(c.name)} <span class="mut small">· ${n} ${n===1?"produto":"produtos"}</span></span>
+        <button class="arrow" onclick="moveCategoria('${c.id}',-1)" ${i===0?"disabled":""}>↑</button>
+        <button class="arrow" onclick="moveCategoria('${c.id}',1)" ${i===CATEGORIES.length-1?"disabled":""}>↓</button>
+        <button class="btn small ghost" onclick="renomearCategoria('${c.id}')">✎</button>
+        <button class="btn small danger" onclick="delCategoria('${c.id}')">✕</button>
+      </div>`;
+    }).join("") || `<p class="mut small">Nenhuma categoria criada ainda.</p>`}
+    <label>Nova categoria</label>
+    <div class="row" style="gap:8px">
+      <input id="catNome" placeholder="Ex.: Bebidas" style="flex:1" onkeydown="if(event.key==='Enter')addCategoria()">
+      <button class="btn primary" onclick="addCategoria()">Criar</button>
+    </div>
+    <div style="height:14px"></div>
+    <button class="btn block" onclick="closeModal();renderProdutos()">Concluir</button>`);
+}
+async function addCategoria(){
+  const name = ($("catNome").value||"").trim();
+  if(!name){ toast("Informe o nome da categoria"); return; }
+  const ordem = (CATEGORIES.length+1)*10;
+  const { error } = await sb.from("ep_categories").insert({ event_id:EVENT.id, name, sort_order:ordem });
+  if(error){ toast(error.message); return; }
+  audit("categoria_criada",{name});
+  await loadCategories(); modalCategorias(); toast("Categoria criada");
+}
+async function renomearCategoria(cid){
+  const c = CATEGORIES.find(x=>x.id===cid); if(!c) return;
+  const name = prompt("Novo nome da categoria:", c.name);
+  if(name===null) return;
+  if(!name.trim()){ toast("Nome vazio"); return; }
+  const { error } = await sb.from("ep_categories").update({ name:name.trim() }).eq("id",cid);
+  if(error){ toast(error.message); return; }
+  audit("categoria_renomeada",{id:cid,name:name.trim()});
+  await loadCategories(); modalCategorias();
+}
+async function delCategoria(cid){
+  const c = CATEGORIES.find(x=>x.id===cid); if(!c) return;
+  const n = PRODUCTS.filter(p=>p.category_id===cid).length;
+  if(!confirm(`Excluir a categoria "${c.name}"?` + (n?` ${n} produto(s) ficarão sem categoria (aparecem em "Outros").`:""))) return;
+  const { error } = await sb.from("ep_categories").delete().eq("id",cid);
+  if(error){ toast(error.message); return; }
+  audit("categoria_excluida",{id:cid,name:c.name});
+  await loadCategories(); await loadProducts(); modalCategorias(); toast("Categoria excluída");
+}
+async function moveCategoria(cid, dir){
+  const arr = CATEGORIES.slice();
+  const i = arr.findIndex(c=>c.id===cid), j = i+dir;
+  if(i<0 || j<0 || j>=arr.length) return;
+  arr.splice(j,0,arr.splice(i,1)[0]);
+  const res = await Promise.all(arr.map((c,k)=> sb.from("ep_categories").update({ sort_order:(k+1)*10 }).eq("id",c.id)));
+  const err = res.find(r=>r.error);
+  if(err){ toast("Não deu para salvar a ordem: "+err.error.message); return; }
+  await loadCategories(); modalCategorias();
+}
+
 function modalProduto(pid){
-  const p = PRODUCTS.find(x=>x.id===pid) || {name:"",price:"",cost:0,stock_initial:0,stock:0,min_stock:5,active:true,image_url:null};
+  const p = PRODUCTS.find(x=>x.id===pid) || {name:"",price:"",cost:0,stock_initial:0,stock:0,min_stock:5,active:true,image_url:null,category_id:null,margin_pct:null};
   PROD_IMG = p.image_url || null;
+  const mk = markupPct(p);
   openModal(`<h2>${pid?"Editar":"Novo"} produto</h2>
     <label>Foto do produto</label>
     <div id="imgPickWrap">${imgPickHTML()}</div>
     <label>Nome</label><input id="prName" value="${esc(p.name)}">
-    <div class="grid2"><div><label>Preço de venda</label><input id="prPrice" inputmode="decimal" value="${p.price}"></div>
-    <div><label>Custo unitário</label><input id="prCost" inputmode="decimal" value="${p.cost}"></div></div>
+    <label>Categoria</label>
+    <select id="prCat">
+      <option value="">— sem categoria —</option>
+      ${CATEGORIES.map(c=>`<option value="${c.id}" ${p.category_id===c.id?"selected":""}>${esc(c.name)}</option>`).join("")}
+    </select>
+    <div class="grid2">
+      <div><label>Custo unitário</label><input id="prCost" inputmode="decimal" value="${p.cost}" oninput="recalcPreco()"></div>
+      <div><label>Margem de lucro (%)</label><input id="prMargem" inputmode="decimal" placeholder="ex.: 100" value="${mk===null?(p.margin_pct??""):(Math.round(mk*10)/10)}" oninput="recalcPreco()"></div>
+    </div>
+    <label>A margem é calculada</label>
+    <select id="prMargemBase" onchange="recalcMargem()">
+      <option value="custo">Sobre o custo (markup — custo × margem)</option>
+      <option value="venda">Sobre o preço de venda</option>
+    </select>
+    <label>Preço de venda</label><input id="prPrice" inputmode="decimal" value="${p.price}" oninput="recalcMargem()">
+    <div id="prCalc" class="calcbox"></div>
+    <div style="height:6px"></div>
     <div class="grid3"><div><label>Estoque inicial</label><input id="prSt0" inputmode="numeric" value="${p.stock_initial}"></div>
     <div><label>Estoque atual</label><input id="prSt" inputmode="numeric" value="${p.stock}"></div>
     <div><label>Mínimo (alerta)</label><input id="prMin" inputmode="numeric" value="${p.min_stock}"></div></div>
     <label>Ativo</label><select id="prAtivo"><option value="1" ${p.active?"selected":""}>Sim</option><option value="0" ${p.active?"":"selected"}>Não</option></select>
     <div style="height:12px"></div>
     <button class="btn primary block" onclick="salvarProduto('${pid||""}')">Salvar</button>`);
+  atualizaCalcBox();
 }
 async function salvarProduto(pid){
-  const row = { event_id:EVENT.id, name:$("prName").value.trim(), price:N($("prPrice").value), cost:N($("prCost").value),
+  const cost = N($("prCost").value), price = N($("prPrice").value);
+  const row = { event_id:EVENT.id, name:$("prName").value.trim(), price, cost,
     stock_initial:parseInt($("prSt0").value)||0, stock:parseInt($("prSt").value)||0, min_stock:parseInt($("prMin").value)||0,
-    active:$("prAtivo").value==="1", image_url: PROD_IMG || null };
+    active:$("prAtivo").value==="1", image_url: PROD_IMG || null,
+    category_id: $("prCat").value || null,
+    margin_pct: cost>0 ? Math.round((price-cost)/cost*1000)/10 : null };
   if(!row.name||row.price<=0){ toast("Nome e preço são obrigatórios"); return; }
+  if(!pid){
+    // novo produto entra no fim da sua categoria
+    const irmaos = PRODUCTS.filter(x=>(x.category_id||null)===row.category_id);
+    row.sort_order = (irmaos.reduce((m,x)=>Math.max(m,Number(x.sort_order)||0),0) || 0) + 10;
+  }
   const r = pid ? await sb.from("ep_products").update(row).eq("id",pid) : await sb.from("ep_products").insert(row);
   if(r.error){ toast(r.error.message); return; }
   audit(pid?"produto_editado":"produto_criado",{name:row.name});
