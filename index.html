@@ -65,9 +65,6 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
   border-radius:99px;padding:9px 16px;cursor:pointer;font-weight:600;font-size:14px}
 .navbtn.on{background:var(--txt);border-color:var(--txt);color:#FCFAF4}
 main{max-width:1080px;margin:0 auto;padding:14px 14px 240px}
-/* Espaço vazio no fim da grade do PDV, para a barra do carrinho nunca cobrir a
-   última fileira de produtos. */
-.pdvspacer{height:320px}
 .view{display:none}.view.on{display:block}
 /* Auth */
 #authView{max-width:400px;margin:8vh auto;padding:0 16px}
@@ -455,7 +452,6 @@ function renderPDV(){
     `${g.name?`<div class="cathead"><span class="ct">${esc(g.name)}</span><span class="cl"></span></div>`:""}
      <div class="pdvgrid">${g.items.map(cardHTML).join("")}</div>`
   ).join("") || `<div class="card mut">Nenhum produto cadastrado neste evento.</div>`;
-  $("pdvGrid").insertAdjacentHTML("beforeend", `<div class="pdvspacer"></div>`);
   $("cartBar").style.display="block";
   renderCart();
 }
@@ -488,7 +484,7 @@ function ajustaEspacoCarrinho(){
   const vis = getComputedStyle(bar).display !== "none";
   const h = vis ? Math.ceil(bar.getBoundingClientRect().height) : 0;
   const t = $("toast"); if(t) t.style.bottom = (h + 16) + "px";
-  const pad = Math.max(240, h + 32);
+  const pad = h + 24;
   if(pad === _ESPACO) return;
   _ESPACO = pad;
   m.style.paddingBottom = pad + "px";
