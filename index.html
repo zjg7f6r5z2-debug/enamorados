@@ -81,6 +81,10 @@ main{max-width:1080px;margin:0 auto;padding:14px 14px 240px}
 .cathead:first-child{margin-top:2px}
 .cathead .ct{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--brand);white-space:nowrap}
 .cathead .cl{flex:1;height:1px;background:var(--line)}
+.hello{font-size:22px;font-weight:800;letter-spacing:-.01em;margin-bottom:2px}
+.hello b{color:var(--brand)}
+.hellosub{font-size:13px;color:var(--mut);margin-bottom:12px}
+.livedot{display:inline-block;width:8px;height:8px;border-radius:99px;background:var(--ok);margin-right:6px;vertical-align:middle}
 .ordrow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line)}
 .ordrow .on{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .arrow{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);cursor:pointer;font-weight:800;color:var(--txt);flex:0 0 auto}
@@ -247,6 +251,12 @@ const N = v => { const n = parseFloat(String(v).replace(",", ".")); return isNaN
 const METHODS = [["dinheiro","Dinheiro"],["pix","Pix"],["debito","Débito"],["credito","Crédito"],["outro","Outro"]];
 const mlabel = m => (METHODS.find(x=>x[0]===m)||["","?"])[1];
 const inicial = n => String(n||"?").trim().charAt(0).toUpperCase();
+const primeiroNome = n => String(n||"").trim().split(/\s+/)[0] || "";
+function saudacaoHora(){ const h=new Date().getHours(); return h<12?"Bom dia":(h<18?"Boa tarde":"Boa noite"); }
+function helloHTML(sub){
+  return `<div class="hello">${saudacaoHora()}, <b>${esc(primeiroNome(ME.name))}</b>!</div>
+          <div class="hellosub">${sub}</div>`;
+}
 
 function toast(msg, ms=2600){ const t=$("toast"); t.textContent=msg; t.style.display="block"; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display="none",ms); }
 function openModal(html){ $("modalBox").innerHTML=html; $("modalWrap").classList.add("on"); }
@@ -270,7 +280,13 @@ async function doBootstrap(){
   if(r.error){ $("authMsg").textContent = r.error.message; return; }
   boot();
 }
-async function doLogout(){ await sb.auth.signOut(); location.reload(); }
+async function doLogout(){ try{ if(RT) sb.removeChannel(RT); }catch(e){} await sb.auth.signOut(); location.reload(); }
+/* Se a sessão expirar no meio do evento, o app volta para o login em vez de
+   falhar silenciosamente com telas vazias. */
+sb.auth.onAuthStateChange((evt, session)=>{
+  if(evt==="SIGNED_OUT" || (evt==="TOKEN_REFRESHED" && !session)){ location.reload(); }
+  if(session){ try{ sb.realtime.setAuth(session.access_token); }catch(e){} }
+});
 
 async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
@@ -283,7 +299,9 @@ async function boot(){
   ME = prof;
   $("authView").style.display="none"; $("app").style.display="block";
   $("topUser").textContent = ME.name + (ME.role==="admin" ? " · Admin Master" : " · Operador");
+  try{ sb.realtime.setAuth(session.access_token); }catch(e){}
   await loadEvent();
+  iniciarRealtime();
   buildNav();
   go(ME.role==="admin" ? "painel" : "pdv");
   syncQueue();
@@ -346,7 +364,7 @@ function go(v){
   clearInterval(POLL);
   const R = { pdv:renderPDV, caixa:renderCaixa, painel:renderPainel, evento:renderRelatorios, produtos:renderProdutos, vendas:renderVendas, usuarios:renderUsuarios, relatorios:renderRelatorios, auditoria:renderAuditoria };
   (R[v]||(()=>{}))();
-  if(v==="painel") POLL = setInterval(renderPainel, 10000);
+  if(v==="painel") POLL = setInterval(atualizarPainel, 30000);
 }
 
 /* ---------- IMAGENS DE PRODUTO ---------- */
@@ -418,7 +436,7 @@ function renderPDV(){
   const el = $("view-pdv");
   if(!EVENT){ el.innerHTML = `<div class="card"><h2>Nenhum evento aberto</h2><p class="mut">Peça ao Administrador Master para abrir um evento.</p></div>`; return; }
   if(!REG){
-    el.innerHTML = `<div class="card">
+    el.innerHTML = helloHTML("Para começar a vender, abra seu caixa.") + `<div class="card">
       <h2>Abrir caixa</h2>
       <p class="mut small">Evento: <b>${esc(EVENT.name)}</b> · Operador: <b>${esc(ME.name)}</b> · ${fd(Date.now())}</p>
       <label>Fundo de caixa (dinheiro inicial)</label><input id="openCash" inputmode="decimal" placeholder="0,00">
@@ -430,7 +448,7 @@ function renderPDV(){
     agendaEspacoCarrinho();
     return;
   }
-  el.innerHTML = `<div class="row" style="margin-bottom:10px">
+  el.innerHTML = helloHTML("Toque no produto para adicionar ao carrinho.") + `<div class="row" style="margin-bottom:10px">
       <span class="tag ok">Caixa aberto ${fdt(REG.opened_at)}</span>
       <span class="tag">Fundo ${fmt(REG.opening_cash)}</span>
       <button class="btn small right" onclick="go('caixa')">Meu caixa →</button>
@@ -455,7 +473,12 @@ function renderPDV(){
   $("cartBar").style.display="block";
   renderCart();
 }
-function addCart(pid){ CART[pid]=(CART[pid]||0)+1; renderCart(); }
+function addCart(pid){
+  const p = PRODUCTS.find(x=>x.id===pid); if(!p) return;
+  const atual = CART[pid]||0;
+  if(atual+1 > Number(p.stock)){ toast(`Estoque de ${p.name}: só ${p.stock} un disponível`); return; }
+  CART[pid]=atual+1; renderCart();
+}
 function decCart(pid){ if(!CART[pid])return; CART[pid]--; if(CART[pid]<=0) delete CART[pid]; renderCart(); }
 function cartTotal(){ return Object.entries(CART).reduce((s,[pid,q])=>{ const p=PRODUCTS.find(x=>x.id===pid); return s + (p?Number(p.price)*q:0); },0); }
 function renderCart(){
@@ -472,7 +495,7 @@ function renderCart(){
       <div><div class="mut small">TOTAL</div><div id="totalBig" class="num">${fmt(total)}</div></div>
       <button class="btn small ghost" onclick="clearCart()" ${items.length?'':'disabled'}>Limpar</button>
       <button class="btn small ghost" onclick="splitPay()" ${items.length?'':'disabled'}>Dividir pgto</button>
-      <button class="btn primary right" style="min-width:170px" onclick="concluirVenda()" ${items.length&&PAY?'':'disabled'}>CONCLUIR VENDA</button>
+      <button class="btn primary right" style="min-width:170px" onclick="concluirVenda()" ${items.length&&PAY&&!SALVANDO?'':'disabled'}>${SALVANDO?"GRAVANDO…":"CONCLUIR VENDA"}</button>
     </div>`;
   agendaEspacoCarrinho();
 }
@@ -515,7 +538,13 @@ async function concluirVenda(){
   if(!PAY || total<=0) return;
   await saveSale([{method:PAY, amount:total}]);
 }
+let SALVANDO = false;
 async function saveSale(payments){
+  if(SALVANDO) return;              // impede duas vendas por duplo toque
+  SALVANDO = true;
+  try{ await _saveSale(payments); } finally { SALVANDO = false; renderCart(); }
+}
+async function _saveSale(payments){
   const items = Object.entries(CART).map(([pid,q])=>{ const p=PRODUCTS.find(x=>x.id===pid);
     return { product_id:pid, product_name:p.name, qty:q, unit_price:Number(p.price), subtotal:Number(p.price)*q }; });
   const total = items.reduce((s,i)=>s+i.subtotal,0);
@@ -527,17 +556,18 @@ async function saveSale(payments){
   if(ok){ LAST_SALE=sale; toast("Venda concluída — "+fmt(total)); showReceiptOffer(sale); }
   else { queueSale(sale); toast("Sem conexão — venda guardada para sincronizar"); }
 }
+/* Grava a venda inteira (cabeçalho + itens + pagamentos) em UMA transação no banco.
+   Se a rede cair no meio, nada é gravado pela metade. E se a mesma venda for
+   reenviada pela fila offline, o banco reconhece o offline_id e não duplica. */
 async function pushSale(s){
   try{
-    const { data, error } = await sb.from("ep_sales").insert({
-      offline_id:s.offline_id, event_id:s.event_id, register_id:s.register_id, operator_id:s.operator_id, total:s.total, created_at:s.created_at
-    }).select("id").single();
-    if(error){ if(String(error.message).includes("duplicate")) return true; return false; }
-    const sid = data.id;
-    const { error:e1 } = await sb.from("ep_sale_items").insert(s.items.map(i=>({sale_id:sid, ...i})));
-    const { error:e2 } = await sb.from("ep_sale_payments").insert(s.payments.map(p=>({sale_id:sid, ...p})));
-    if(e1||e2) return false;
-    audit("venda", { sale_id:sid, total:s.total });
+    const { data, error } = await sb.rpc("ep_push_sale", { p: {
+      offline_id:s.offline_id, event_id:s.event_id, register_id:s.register_id,
+      operator_id:s.operator_id, total:s.total, created_at:s.created_at,
+      items:s.items, payments:s.payments
+    }});
+    if(error) return false;
+    audit("venda", { sale_id:data, total:s.total });
     return true;
   }catch(e){ return false; }
 }
@@ -554,6 +584,108 @@ async function syncQueue(){
 window.addEventListener("online", ()=>{ $("offlineBar").classList.remove("on"); syncQueue(); });
 window.addEventListener("offline", ()=>$("offlineBar").classList.add("on"));
 if(!navigator.onLine) $("offlineBar").classList.add("on");
+
+
+/* ================= SINCRONIZAÇÃO EM TEMPO REAL =================
+   Oito operadores usam o app ao mesmo tempo. Cada venda baixa o estoque no banco
+   (trigger), e o banco avisa TODOS os aparelhos conectados pelo Realtime.
+   Há três camadas, de propósito: Realtime (instantâneo), recarga periódica
+   (se o socket cair) e recarga ao voltar para o app (celular bloqueado). */
+let RT = null, T_PROD = null, T_PAINEL = null;
+
+function iniciarRealtime(){
+  try{ if(RT){ sb.removeChannel(RT); RT = null; } }catch(e){}
+  if(!EVENT) return;
+  const f = `event_id=eq.${EVENT.id}`;
+  RT = sb.channel("ep-live-"+EVENT.id)
+    .on("postgres_changes",{event:"*",schema:"public",table:"ep_products",  filter:f}, onProdutoRemoto)
+    .on("postgres_changes",{event:"*",schema:"public",table:"ep_categories",filter:f}, ()=>agendarRecargaProdutos())
+    .on("postgres_changes",{event:"*",schema:"public",table:"ep_sales",     filter:f}, ()=>agendarPainel())
+    .on("postgres_changes",{event:"*",schema:"public",table:"ep_sangrias",  filter:f}, ()=>agendarPainel())
+    .on("postgres_changes",{event:"*",schema:"public",table:"ep_registers", filter:f}, onCaixaRemoto)
+    .subscribe(st=>{ if(st==="CHANNEL_ERROR"||st==="TIMED_OUT"){ setTimeout(iniciarRealtime, 4000); } });
+}
+
+/* Estoque mudou em outro aparelho: atualiza a memória e a grade, sem mexer no carrinho. */
+function onProdutoRemoto(payload){
+  const novo = payload.new, velho = payload.old;
+  if(payload.eventType === "DELETE"){
+    PRODUCTS = PRODUCTS.filter(p=>p.id !== (velho&&velho.id));
+  } else if(novo){
+    const i = PRODUCTS.findIndex(p=>p.id===novo.id);
+    if(i>=0) PRODUCTS[i] = novo; else PRODUCTS.push(novo);
+  }
+  try{ localStorage.setItem("ep_products_"+EVENT.id, JSON.stringify(PRODUCTS)); }catch(e){}
+  ajustarCarrinhoAoEstoque();
+  agendarRedesenho();
+  agendarPainel();
+}
+
+/* Se o estoque caiu abaixo do que já está no carrinho, corrige e avisa. */
+function ajustarCarrinhoAoEstoque(){
+  let mexeu = false;
+  Object.keys(CART).forEach(pid=>{
+    const p = PRODUCTS.find(x=>x.id===pid);
+    if(!p){ delete CART[pid]; mexeu = true; return; }
+    if(CART[pid] > Number(p.stock)){
+      if(Number(p.stock) <= 0){ delete CART[pid]; toast(`${p.name} esgotou — removido do carrinho`); }
+      else { CART[pid] = Number(p.stock); toast(`${p.name}: restam só ${p.stock} un`); }
+      mexeu = true;
+    }
+  });
+  if(mexeu) renderCart();
+}
+
+/* Caixa alterado por um Admin em outro aparelho (fechado/reaberto). */
+function onCaixaRemoto(payload){
+  const r = payload.new;
+  if(r && REG && r.id === REG.id){
+    if(r.status === "fechado"){ REG = null; toast("Seu caixa foi fechado pelo Administrador"); go("caixa"); }
+    else { REG = r; }
+  }
+  agendarPainel();
+}
+
+function viewAtual(){ const v = document.querySelector(".view.on"); return v ? v.id.replace("view-","") : null; }
+function agendarRedesenho(){
+  clearTimeout(T_PROD);
+  T_PROD = setTimeout(()=>{
+    const v = viewAtual();
+    if(v==="pdv" && REG) renderPDV();
+    else if(v==="produtos") renderProdutos();
+  }, 400);
+}
+async function agendarRecargaProdutos(){ await loadCategories(); await loadProducts(); agendarRedesenho(); }
+function agendarPainel(){
+  if(viewAtual()!=="painel") return;
+  clearTimeout(T_PAINEL);
+  T_PAINEL = setTimeout(atualizarPainel, 1200);
+}
+/* Redesenha o painel preservando a posição da rolagem. */
+async function atualizarPainel(){
+  const y = window.scrollY;
+  await renderPainel();
+  window.scrollTo(0, y);
+}
+
+/* Rede de segurança: recarrega periodicamente mesmo que o Realtime caia. */
+setInterval(async ()=>{
+  if(!EVENT || !navigator.onLine || document.hidden) return;
+  const v = viewAtual();
+  if(v==="pdv" || v==="produtos"){ await loadProducts(); ajustarCarrinhoAoEstoque(); agendarRedesenho(); }
+}, 25000);
+setInterval(()=>{ if(navigator.onLine) syncQueue(); }, 30000);
+
+/* Ao voltar para o app (tela desbloqueada, aba retomada). */
+document.addEventListener("visibilitychange", async ()=>{
+  if(document.hidden || !EVENT) return;
+  iniciarRealtime();
+  await loadProducts();
+  ajustarCarrinhoAoEstoque();
+  agendarRedesenho();
+  if(viewAtual()==="painel") atualizarPainel();
+  syncQueue();
+});
 
 function showReceiptOffer(sale){
   const t=$("toast");
@@ -575,6 +707,13 @@ function printReceipt(){
 /* ---------- CAIXA (abertura/sangria/fechamento) ---------- */
 async function abrirCaixa(){
   const cash = N($("openCash").value);
+  // O mesmo operador pode ter aberto o caixa em outro aparelho: reaproveita em vez de duplicar.
+  const { data:jaAberto } = await sb.from("ep_registers").select("*")
+    .eq("event_id",EVENT.id).eq("operator_id",ME.id).eq("status","aberto").limit(1);
+  if(jaAberto && jaAberto[0]){
+    REG = jaAberto[0]; toast("Você já tinha um caixa aberto — retomando");
+    renderPDV(); $("cartBar").style.display="block"; agendaEspacoCarrinho(); return;
+  }
   const { data, error } = await sb.from("ep_registers").insert({
     event_id:EVENT.id, operator_id:ME.id, opening_cash:cash, opening_notes:$("openNotes").value||null
   }).select("*").single();
@@ -801,8 +940,9 @@ async function renderPainel(){
   const payLegend = METHODS.map(([k,l],i)=>({label:l,value:A.by[k],color:CHART[i]}));
 
   el.innerHTML = `
+    ${helloHTML("Acompanhe o evento em tempo real.")}
     <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Painel</h2>
-      <span class="mut small right">● ao vivo · 10s</span></div>
+      <span class="mut small right"><span class="livedot"></span>ao vivo</span></div>
 
     <!-- HERO: total arrecadado + composição -->
     <div class="card hero">
@@ -1350,17 +1490,9 @@ function filterVendas(){
 }
 async function delVenda(sid,status){
   if(!confirm("Excluir esta venda em definitivo? Não dá pra desfazer.")) return;
-  // devolve o estoque só se a venda ainda estava ativa (cancelada já teve estoque estornado)
-  if(status==="ok"){
-    const s = SALES_CACHE.find(x=>x.id===sid);
-    for(const i of (s?.ep_sale_items||[])){
-      if(i.product_id){
-        const p = PRODUCTS.find(x=>x.id===i.product_id);
-        if(p) await sb.from("ep_products").update({ stock: Number(p.stock)+Number(i.qty) }).eq("id",i.product_id);
-      }
-    }
-  }
-  const { error } = await sb.from("ep_sales").delete().eq("id",sid);
+  // O banco estorna o estoque e apaga a venda na mesma transação (sem depender
+  // do estoque que esta tela tem em memória, que pode estar defasado).
+  const { error } = await sb.rpc("ep_delete_sale", { p_sale_id: sid });
   if(error){ toast(error.message); return; }
   audit("venda_excluida",{sale_id:sid}); toast("Venda excluída"); await loadProducts(); renderVendas();
 }
