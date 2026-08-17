@@ -89,6 +89,12 @@ main{max-width:1080px;margin:0 auto;padding:14px 14px 240px}
 .ordrow .on{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .arrow{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);cursor:pointer;font-weight:800;color:var(--txt);flex:0 0 auto}
 .arrow:disabled{opacity:.3;cursor:default}
+.pcode{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--brand);
+  background:var(--brand-soft);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-variant-numeric:tabular-nums}
+.pbtn .pcode{align-self:flex-start;margin-bottom:3px}
+.codecell{font-weight:800;color:var(--brand);font-variant-numeric:tabular-nums;white-space:nowrap}
+.nofoto{border:1px dashed var(--bad);color:var(--bad);font-size:10px;font-weight:800;border-radius:6px;padding:1px 5px}
+.thumb.ph.falta{background:rgba(164,64,47,.08);border-color:var(--bad);color:var(--bad);font-size:10px}
 .calcbox{background:var(--brand-soft);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;margin-top:8px}
 .pbtn{border:1px solid var(--line);background:var(--panel);border-radius:var(--r);padding:0;overflow:hidden;
   cursor:pointer;text-align:left;display:flex;flex-direction:column;color:var(--txt)}
@@ -459,6 +465,7 @@ function renderPDV(){
     return `<button class="pbtn ${low?'low':''} ${out?'out':''}" onclick="addCart('${p.id}')">
       ${prodImgHTML(p)}
       <span class="pbody">
+        ${p.code?`<span class="pcode">${esc(p.code)}</span>`:""}
         <span class="pn">${esc(p.name)}</span>
         <span class="pp num">${fmt(p.price)}</span>
         <span class="ps num">estoque ${p.stock}</span>
@@ -1011,7 +1018,7 @@ async function renderPainel(){
     <!-- Estoque -->
     <div class="card"><h3>Estoque em tempo real</h3>
       ${D.prods.length ? D.prods.map(p=>`<div class="row" style="padding:6px 0;border-bottom:1px dashed var(--line)">
-        ${prodImgHTML(p,"thumb")}<span>${esc(p.name)}</span>
+        ${prodImgHTML(p,"thumb")}<span>${p.code?`<span class="pcode">${esc(p.code)}</span> `:""}${esc(p.name)}</span>
         <b class="right num" style="color:${p.stock<=p.min_stock?'var(--bad)':'inherit'}">${p.stock} un</b></div>`).join("") : '<p class="mut small">Nenhum produto cadastrado.</p>'}
     </div>`;
 }
@@ -1130,6 +1137,9 @@ async function fechamentoGeral(eid){
 }
 
 /* ---------- PRODUTOS / ESTOQUE (admin) ---------- */
+/* Filtro para o trabalho de cadastrar as fotos: mostra só o que ainda falta. */
+let FILTRO_SEM_FOTO = false;
+function toggleSemFoto(){ FILTRO_SEM_FOTO = !FILTRO_SEM_FOTO; renderProdutos(); }
 async function renderProdutos(){
   const el=$("view-produtos");
   if(!EVENT){ el.innerHTML=`<div class="card mut">Crie um evento primeiro.</div>`; return; }
@@ -1143,6 +1153,7 @@ async function renderProdutos(){
     <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Produtos & Estoque</h2>
       <button class="btn small primary right" onclick="modalProduto()">+ Produto</button></div>
     <div class="row" style="margin-bottom:10px">
+      <button class="btn small ${FILTRO_SEM_FOTO?'primary':''}" onclick="toggleSemFoto()">${FILTRO_SEM_FOTO?"◉":"○"} Só sem foto (${PRODUCTS.filter(p=>!p.image_url).length})</button>
       <button class="btn small" onclick="modalCategorias()">Categorias</button>
       <button class="btn small" onclick="modalOrdenar()">Ordenar grade</button>
       <button class="btn small" onclick="modalConferencia('abertura')">Conferência de abertura</button>
@@ -1150,20 +1161,21 @@ async function renderProdutos(){
       <button class="btn small" onclick="modalAjuste()">Perda / consumo / entrada</button>
       <button class="btn small" onclick="modalDespesa()">+ Compra / despesa</button>
     </div>
-    ${groupByCat(PRODUCTS).map(g=>`
+    ${groupByCat(PRODUCTS.filter(p=>!FILTRO_SEM_FOTO || !p.image_url)).map(g=>`
       <div class="card tbl-wrap">
         <div class="row" style="margin-bottom:6px">
           <b style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--brand)">${esc(g.name||"Todos os produtos")}</b>
           <span class="right mut small">${g.items.length} ${g.items.length===1?"item":"itens"}</span>
         </div>
         <table>
-        <tr><th style="width:70px">Ordem</th><th>Foto</th><th>Produto</th><th>Preço</th><th>Custo</th><th>Margem</th><th>Estoque</th><th>Mín.</th><th></th></tr>
+        <tr><th style="width:70px">Ordem</th><th>Código</th><th>Foto</th><th>Produto</th><th>Preço</th><th>Custo</th><th>Margem</th><th>Estoque</th><th>Mín.</th><th></th></tr>
         ${g.items.map((p,i)=>`<tr>
           <td style="white-space:nowrap">
             <button class="btn small" onclick="moveProduto('${p.id}',-1)" ${i===0?"disabled":""} title="Subir">↑</button>
             <button class="btn small" onclick="moveProduto('${p.id}',1)" ${i===g.items.length-1?"disabled":""} title="Descer">↓</button>
           </td>
-          <td style="width:46px">${prodImgHTML(p,"thumb")}</td>
+          <td class="codecell">${p.code?esc(p.code):'<span class="mut">—</span>'}</td>
+          <td style="width:46px">${p.image_url?prodImgHTML(p,"thumb"):`<div class="thumb ph falta">sem<br>foto</div>`}</td>
           <td>${esc(p.name)}${p.active?"":' <span class="tag bad">inativo</span>'}</td>
           <td class="num">${fmt(p.price)}</td><td class="num">${fmt(p.cost)}</td>
           <td class="num">${markupPct(p)===null?'<span class="mut">—</span>':markupPct(p).toFixed(0)+"%"}</td>
@@ -1290,7 +1302,7 @@ function modalOrdenar(){
     ${groups.map(g=>`
       <div class="cathead"><span class="ct">${esc(g.name||"Todos os produtos")}</span><span class="cl"></span></div>
       ${g.items.map((p,i)=>`<div class="ordrow">
-        <span class="on">${esc(p.name)}${p.active?"":' <span class="tag bad">inativo</span>'}</span>
+        <span class="on">${p.code?`<span class="pcode">${esc(p.code)}</span> `:""}${esc(p.name)}${p.active?"":' <span class="tag bad">inativo</span>'}</span>
         <button class="arrow" onclick="moveProduto('${p.id}',-1,true)" ${i===0?"disabled":""}>↑</button>
         <button class="arrow" onclick="moveProduto('${p.id}',1,true)" ${i===g.items.length-1?"disabled":""}>↓</button>
       </div>`).join("")}`).join("") || `<p class="mut">Nenhum produto cadastrado.</p>`}
@@ -1360,13 +1372,16 @@ async function moveCategoria(cid, dir){
 }
 
 function modalProduto(pid){
-  const p = PRODUCTS.find(x=>x.id===pid) || {name:"",price:"",cost:0,stock_initial:0,stock:0,min_stock:5,active:true,image_url:null,category_id:null,margin_pct:null};
+  const p = PRODUCTS.find(x=>x.id===pid) || {code:"",name:"",price:"",cost:0,stock_initial:0,stock:0,min_stock:5,active:true,image_url:null,category_id:null,margin_pct:null};
   PROD_IMG = p.image_url || null;
   const mk = markupPct(p);
   openModal(`<h2>${pid?"Editar":"Novo"} produto</h2>
     <label>Foto do produto</label>
     <div id="imgPickWrap">${imgPickHTML()}</div>
-    <label>Nome</label><input id="prName" value="${esc(p.name)}">
+    <div class="grid2">
+      <div><label>Código</label><input id="prCode" value="${esc(p.code||"")}" placeholder="ex.: EB-220"></div>
+      <div><label>Nome</label><input id="prName" value="${esc(p.name)}"></div>
+    </div>
     <label>Categoria</label>
     <select id="prCat">
       <option value="">— sem categoria —</option>
@@ -1394,7 +1409,7 @@ function modalProduto(pid){
 }
 async function salvarProduto(pid){
   const cost = N($("prCost").value), price = N($("prPrice").value);
-  const row = { event_id:EVENT.id, name:$("prName").value.trim(), price, cost,
+  const row = { event_id:EVENT.id, code: ($("prCode").value.trim().toUpperCase() || null), name:$("prName").value.trim(), price, cost,
     stock_initial:parseInt($("prSt0").value)||0, stock:parseInt($("prSt").value)||0, min_stock:parseInt($("prMin").value)||0,
     active:$("prAtivo").value==="1", image_url: PROD_IMG || null,
     category_id: $("prCat").value || null,
@@ -1414,7 +1429,7 @@ function modalConferencia(phase){
   openModal(`<h2>Conferência de estoque — ${phase}</h2>
     <p class="mut small">Informe a contagem física. O sistema registra esperado × contado.</p>
     <table><tr><th>Produto</th><th>Sistema</th><th>Contado</th></tr>
-    ${PRODUCTS.map(p=>`<tr><td>${esc(p.name)}</td><td class="num">${p.stock}</td>
+    ${PRODUCTS.map(p=>`<tr><td>${p.code?`<span class="pcode">${esc(p.code)}</span> `:""}${esc(p.name)}</td><td class="num">${p.stock}</td>
       <td style="width:90px"><input id="cf_${p.id}" inputmode="numeric" value="${p.stock}" style="padding:7px 8px"></td></tr>`).join("")}</table>
     <div style="height:12px"></div>
     <button class="btn primary block" onclick="salvarConferencia('${phase}')">Registrar conferência</button>`);
@@ -1428,7 +1443,7 @@ async function salvarConferencia(phase){
 }
 function modalAjuste(){
   openModal(`<h2>Ajuste de estoque</h2>
-    <label>Produto</label><select id="ajProd">${PRODUCTS.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select>
+    <label>Produto</label><select id="ajProd">${PRODUCTS.map(p=>`<option value="${p.id}">${p.code?esc(p.code)+" · ":""}${esc(p.name)}</option>`).join("")}</select>
     <label>Tipo</label><select id="ajKind"><option value="perda">Perda</option><option value="consumo">Consumo interno</option><option value="entrada">Entrada (reposição)</option></select>
     <label>Quantidade</label><input id="ajQty" inputmode="numeric" placeholder="0">
     <label>Motivo</label><input id="ajReason">
@@ -1474,6 +1489,7 @@ function filterVendas(){
   const list = SALES_CACHE.filter(s=>{
     if(!q) return true;
     return s.id.slice(0,8).includes(q) || window._pn(s.operator_id).toLowerCase().includes(q) ||
+      (s.ep_sale_items||[]).some(i=>{ const p=PRODUCTS.find(x=>x.id===i.product_id); return p&&p.code&&p.code.toLowerCase().includes(q); }) ||
       (s.ep_sale_items||[]).some(i=>i.product_name.toLowerCase().includes(q));
   }).slice(0,120);
   $("salesList").innerHTML = list.map(s=>`<div class="card" style="padding:12px">
