@@ -65,15 +65,9 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
   border-radius:99px;padding:9px 16px;cursor:pointer;font-weight:600;font-size:14px}
 .navbtn.on{background:var(--txt);border-color:var(--txt);color:#FCFAF4}
 main{max-width:1080px;margin:0 auto;padding:14px 14px 240px}
-/* Modo app: a tela tem altura fixa, o conteúdo rola dentro do <main> e a barra do
-   carrinho é o último elemento do layout — assim ela nunca fica POR CIMA dos produtos. */
-body.appmode{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
-body.appmode #offlineBar{flex:0 0 auto}
-body.appmode #app{display:flex!important;flex-direction:column;flex:1 1 auto;min-height:0}
-body.appmode #topbar,body.appmode #nav{position:static;flex:0 0 auto}
-body.appmode main{flex:1 1 auto;min-height:0;width:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
-  overscroll-behavior:contain;padding-bottom:20px}
-body.appmode #cartBar{position:static;flex:0 0 auto;z-index:auto}
+/* Espaço vazio no fim da grade do PDV, para a barra do carrinho nunca cobrir a
+   última fileira de produtos. */
+.pdvspacer{height:320px}
 .view{display:none}.view.on{display:block}
 /* Auth */
 #authView{max-width:400px;margin:8vh auto;padding:0 16px}
@@ -283,7 +277,7 @@ async function doLogout(){ await sb.auth.signOut(); location.reload(); }
 
 async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
-  if(!session){ $("authView").style.display="block"; $("app").style.display="none"; document.body.classList.remove("appmode"); return; }
+  if(!session){ $("authView").style.display="block"; $("app").style.display="none"; return; }
   const { data:prof, error } = await sb.from("ep_profiles").select("*").eq("id",session.user.id).single();
   if(error || !prof || !prof.active){
     $("authMsg").textContent = "Conta sem acesso ao sistema ou desativada.";
@@ -291,7 +285,6 @@ async function boot(){
   }
   ME = prof;
   $("authView").style.display="none"; $("app").style.display="block";
-  document.body.classList.add("appmode");
   $("topUser").textContent = ME.name + (ME.role==="admin" ? " · Admin Master" : " · Operador");
   await loadEvent();
   buildNav();
@@ -352,7 +345,6 @@ function go(v){
   $("view-"+v).classList.add("on");
   const nb=$("nav-"+v); if(nb) nb.classList.add("on");
   $("cartBar").style.display = (v==="pdv" && REG) ? "block" : "none";
-  const _m = document.querySelector("main"); if(_m) _m.scrollTop = 0;
   agendaEspacoCarrinho();
   clearInterval(POLL);
   const R = { pdv:renderPDV, caixa:renderCaixa, painel:renderPainel, evento:renderRelatorios, produtos:renderProdutos, vendas:renderVendas, usuarios:renderUsuarios, relatorios:renderRelatorios, auditoria:renderAuditoria };
@@ -463,6 +455,7 @@ function renderPDV(){
     `${g.name?`<div class="cathead"><span class="ct">${esc(g.name)}</span><span class="cl"></span></div>`:""}
      <div class="pdvgrid">${g.items.map(cardHTML).join("")}</div>`
   ).join("") || `<div class="card mut">Nenhum produto cadastrado neste evento.</div>`;
+  $("pdvGrid").insertAdjacentHTML("beforeend", `<div class="pdvspacer"></div>`);
   $("cartBar").style.display="block";
   renderCart();
 }
@@ -487,9 +480,7 @@ function renderCart(){
     </div>`;
   agendaEspacoCarrinho();
 }
-/* No "modo app" a barra do carrinho faz parte do layout e nunca cobre nada,
-   então só o toast precisa ser posicionado acima dela. O ajuste de padding
-   abaixo é a rede de segurança para navegadores sem suporte a dvh/flex. */
+/* Reserva no fim da página o equivalente à altura da barra do carrinho. */
 let _ESPACO = -1;
 function ajustaEspacoCarrinho(){
   const bar = $("cartBar"), m = document.querySelector("main");
@@ -497,8 +488,7 @@ function ajustaEspacoCarrinho(){
   const vis = getComputedStyle(bar).display !== "none";
   const h = vis ? Math.ceil(bar.getBoundingClientRect().height) : 0;
   const t = $("toast"); if(t) t.style.bottom = (h + 16) + "px";
-  if(document.body.classList.contains("appmode")){ m.style.paddingBottom = ""; _ESPACO = -1; return; }
-  const pad = h + 32;
+  const pad = Math.max(240, h + 32);
   if(pad === _ESPACO) return;
   _ESPACO = pad;
   m.style.paddingBottom = pad + "px";
