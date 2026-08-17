@@ -89,6 +89,12 @@ main{max-width:1080px;margin:0 auto;padding:14px 14px 240px}
 .ordrow .on{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .arrow{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);cursor:pointer;font-weight:800;color:var(--txt);flex:0 0 auto}
 .arrow:disabled{opacity:.3;cursor:default}
+.subnav{display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 0 10px;scrollbar-width:none}
+.subnav::-webkit-scrollbar{display:none}
+.subbtn{flex:0 0 auto;white-space:nowrap;border:1px solid var(--line);background:transparent;color:var(--mut);
+  border-radius:99px;padding:8px 15px;cursor:pointer;font-weight:700;font-size:13.5px}
+.subbtn.on{background:var(--txt);border-color:var(--txt);color:#FCFAF4}
+.subbtn .cnt{opacity:.7;font-weight:600}
 .pcode{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--brand);
   background:var(--brand-soft);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-variant-numeric:tabular-nums}
 .pbtn .pcode{align-self:flex-start;margin-bottom:3px}
@@ -218,6 +224,7 @@ svg text{font-family:inherit}
     <span class="right mut small" id="topUser"></span>
     <button class="btn small ghost" onclick="doLogout()">Sair</button>
   </div>
+  <div id="verbar" style="text-align:center;font-size:10px;color:var(--mut);letter-spacing:.06em;padding:3px 0;border-bottom:1px solid var(--line)">versão 17/08 · 15h</div>
   <div id="nav"></div>
   <main>
     <div id="view-pdv" class="view"></div>
@@ -438,6 +445,16 @@ function prodImgHTML(p, cls="pimg"){
     ? `<img class="${cls}" src="${esc(p.image_url)}" alt="" loading="lazy" onerror="this.style.display='none'">`
     : `<div class="${cls} ph">${esc(inicial(p.name))}</div>`;
 }
+/* Janelas por categoria + busca por nome ou código.
+   Com 50+ produtos (só os itens religiosos são 37, muitos com nome parecido),
+   rolar uma grade única não funciona no meio do evento. */
+let PDV_CAT = "todas", PDV_BUSCA = "";
+function goCatPDV(c){ PDV_CAT = c; PDV_BUSCA = ""; renderPDV(); }
+function buscarPDV(v){
+  PDV_BUSCA = v;
+  const g = $("pdvGrid"); if(!g) return;
+  desenharGradePDV();   // redesenha só a grade, sem recriar o campo de busca
+}
 function renderPDV(){
   const el = $("view-pdv");
   if(!EVENT){ el.innerHTML = `<div class="card"><h2>Nenhum evento aberto</h2><p class="mut">Peça ao Administrador Master para abrir um evento.</p></div>`; return; }
@@ -454,12 +471,34 @@ function renderPDV(){
     agendaEspacoCarrinho();
     return;
   }
-  el.innerHTML = helloHTML("Toque no produto para adicionar ao carrinho.") + `<div class="row" style="margin-bottom:10px">
+
+  const ativos = PRODUCTS.filter(p=>p.active);
+  const grupos = groupByCat(ativos);
+  const abas = [["todas", "Todas", ativos.length]].concat(
+    grupos.map(g=>[g.id||"outros", g.name||"Outros", g.items.length])
+  );
+  if(!abas.some(a=>a[0]===PDV_CAT)) PDV_CAT = "todas";
+
+  el.innerHTML = helloHTML("Toque no produto para adicionar ao carrinho.") + `
+    <div class="row" style="margin-bottom:10px">
       <span class="tag ok">Caixa aberto ${fdt(REG.opened_at)}</span>
       <span class="tag">Fundo ${fmt(REG.opening_cash)}</span>
       <button class="btn small right" onclick="go('caixa')">Meu caixa →</button>
     </div>
+    <div class="subnav">
+      ${abas.map(([id,nome,n])=>`<button class="subbtn ${PDV_CAT===id?"on":""}" onclick="goCatPDV('${id}')">${esc(nome)} <span class="cnt">${n}</span></button>`).join("")}
+    </div>
+    <input id="pdvBusca" placeholder="Buscar por nome ou código (ex.: EB-246)" value="${esc(PDV_BUSCA)}"
+      oninput="buscarPDV(this.value)" style="margin-bottom:12px">
     <div id="pdvGrid"></div>`;
+
+  desenharGradePDV();
+  $("cartBar").style.display="block";
+  renderCart();
+}
+function desenharGradePDV(){
+  const grid = $("pdvGrid"); if(!grid) return;
+  const q = PDV_BUSCA.trim().toLowerCase();
   const cardHTML = p => {
     const low = p.stock<=p.min_stock, out = p.stock<=0;
     return `<button class="pbtn ${low?'low':''} ${out?'out':''}" onclick="addCart('${p.id}')">
@@ -472,13 +511,21 @@ function renderPDV(){
       </span>
     </button>`;
   };
-  const groups = groupByCat(PRODUCTS.filter(p=>p.active));
-  $("pdvGrid").innerHTML = groups.map(g=>
+  let lista = PRODUCTS.filter(p=>p.active);
+  if(q) lista = lista.filter(p=>
+    String(p.name||"").toLowerCase().includes(q) || String(p.code||"").toLowerCase().includes(q));
+
+  let grupos = groupByCat(lista);
+  // Numa categoria específica (e sem busca), mostra só ela e sem cabeçalho repetido.
+  if(PDV_CAT !== "todas" && !q){
+    grupos = grupos.filter(g=>(g.id||"outros") === PDV_CAT).map(g=>({...g, name:null}));
+  }
+
+  grid.innerHTML = grupos.map(g=>
     `${g.name?`<div class="cathead"><span class="ct">${esc(g.name)}</span><span class="cl"></span></div>`:""}
      <div class="pdvgrid">${g.items.map(cardHTML).join("")}</div>`
-  ).join("") || `<div class="card mut">Nenhum produto cadastrado neste evento.</div>`;
-  $("cartBar").style.display="block";
-  renderCart();
+  ).join("") || `<div class="card mut">${q?"Nenhum produto encontrado para essa busca.":"Nenhum produto nesta categoria."}</div>`;
+  agendaEspacoCarrinho();
 }
 function addCart(pid){
   const p = PRODUCTS.find(x=>x.id===pid); if(!p) return;
@@ -658,7 +705,10 @@ function agendarRedesenho(){
   clearTimeout(T_PROD);
   T_PROD = setTimeout(()=>{
     const v = viewAtual();
-    if(v==="pdv" && REG) renderPDV();
+    if(v==="pdv" && REG){
+      if(document.activeElement && document.activeElement.id==="pdvBusca") desenharGradePDV();
+      else renderPDV();
+    }
     else if(v==="produtos") renderProdutos();
   }, 400);
 }
@@ -740,6 +790,8 @@ async function regStats(regId){
   return { sales:sales||[], sangrias:sang||[], total, n:(sales||[]).length, by, totalSang:nSang,
     ticket:(sales||[]).length? total/(sales||[]).length : 0 };
 }
+let CAIXA_TAB = "resumo";
+function goCaixa(t){ CAIXA_TAB = t; renderCaixa(); }
 async function renderCaixa(){
   const el=$("view-caixa");
   if(!REG){
@@ -757,26 +809,99 @@ async function renderCaixa(){
   }
   const st = await regStats(REG.id);
   const espDin = Number(REG.opening_cash)+st.by.dinheiro-st.totalSang;
-  el.innerHTML = `
-    <h2>Meu caixa</h2>
-    <div class="kpis">
+  const T = CAIXA_TAB;
+
+  /* Cabeçalho fixo: os dois números que o operador mais olha ficam sempre à vista,
+     e o resto é dividido em janelas para não virar uma página longa de rolagem. */
+  const topo = `
+    <h2 style="margin-bottom:10px">Meu caixa</h2>
+    <div class="kpis" style="margin-bottom:12px">
       <div class="kpi"><div class="v num">${fmt(st.total)}</div><div class="l">Total vendido</div></div>
-      <div class="kpi"><div class="v num">${st.n}</div><div class="l">Vendas</div></div>
-      <div class="kpi"><div class="v num">${fmt(st.ticket)}</div><div class="l">Ticket médio</div></div>
       <div class="kpi"><div class="v num">${fmt(espDin)}</div><div class="l">Dinheiro em caixa (esperado)</div></div>
     </div>
-    <div class="card"><h3>Por forma de pagamento</h3>
-      ${METHODS.map(([k,l])=>`<div class="row" style="padding:5px 0"><span>${l}</span><b class="right num">${fmt(st.by[k])}</b></div>`).join("")}
-    </div>
-    <div class="card"><div class="row"><h3 style="margin:0">Sangrias · ${fmt(st.totalSang)}</h3>
-      <button class="btn small right" onclick="modalSangria()">+ Nova sangria</button></div>
-      ${st.sangrias.map(s=>`<div class="row small" style="padding:6px 0;border-bottom:1px dashed var(--line)">
-        <span>${fdt(s.created_at)} · ${esc(s.reason)} · resp.: ${esc(s.responsible)}</span><b class="right num" style="color:var(--bad)">−${fmt(s.amount)}</b>
+    <div class="subnav">
+      <button class="subbtn ${T==="resumo"?"on":""}"   onclick="goCaixa('resumo')">Resumo</button>
+      <button class="subbtn ${T==="pgto"?"on":""}"     onclick="goCaixa('pgto')">Pagamentos</button>
+      <button class="subbtn ${T==="vendas"?"on":""}"   onclick="goCaixa('vendas')">Minhas vendas <span class="cnt">${st.n}</span></button>
+      <button class="subbtn ${T==="sangrias"?"on":""}" onclick="goCaixa('sangrias')">Sangrias <span class="cnt">${st.sangrias.length}</span></button>
+      <button class="subbtn ${T==="fechar"?"on":""}"   onclick="goCaixa('fechar')">Fechar caixa</button>
+    </div>`;
+
+  let corpo = "";
+
+  if(T==="resumo"){
+    corpo = `
+      <div class="kpis">
+        <div class="kpi"><div class="v num">${st.n}</div><div class="l">Vendas</div></div>
+        <div class="kpi"><div class="v num">${fmt(st.ticket)}</div><div class="l">Ticket médio</div></div>
+        <div class="kpi"><div class="v num">${fmt(REG.opening_cash)}</div><div class="l">Fundo inicial</div></div>
+        <div class="kpi"><div class="v num" style="color:var(--bad)">−${fmt(st.totalSang)}</div><div class="l">Sangrias</div></div>
+      </div>
+      <div class="card">
+        <div class="row" style="padding:5px 0"><span>Caixa aberto em</span><b class="right">${fdt(REG.opened_at)}</b></div>
+        <div class="row" style="padding:5px 0"><span>Operador</span><b class="right">${esc(ME.name)}</b></div>
+        <div class="row" style="padding:5px 0"><span>Recebido em dinheiro</span><b class="right num">${fmt(st.by.dinheiro)}</b></div>
+        <hr>
+        <div class="row"><b>Esperado na gaveta</b><b class="right num" style="font-size:18px">${fmt(espDin)}</b></div>
+        <p class="mut small" style="margin:8px 0 0">Fundo inicial + dinheiro recebido − sangrias. Pix e cartão não entram nesta conta.</p>
+      </div>
+      <div class="row">
+        <button class="btn" onclick="go('pdv')">← Voltar a vender</button>
+        <button class="btn right" onclick="goCaixa('sangrias')">Registrar sangria</button>
+      </div>`;
+  }
+
+  else if(T==="pgto"){
+    const maior = Math.max(1, ...METHODS.map(([k])=>st.by[k]));
+    corpo = `<div class="card"><h3>Por forma de pagamento</h3>
+      ${METHODS.map(([k,l],i)=>`
+        <div style="margin:10px 0">
+          <div class="row" style="margin-bottom:4px"><span>${l}</span><b class="right num">${fmt(st.by[k])}</b></div>
+          <div style="height:8px;background:var(--panel2);border-radius:99px;overflow:hidden">
+            <div style="height:100%;width:${(st.by[k]/maior*100).toFixed(1)}%;background:${CHART[i%CHART.length]};border-radius:99px"></div>
+          </div>
+        </div>`).join("")}
+      <hr><div class="row"><b>Total</b><b class="right num" style="font-size:18px">${fmt(st.total)}</b></div>
+    </div>`;
+  }
+
+  else if(T==="vendas"){
+    const lista = st.sales.slice().sort((a,b)=> new Date(b.created_at)-new Date(a.created_at));
+    corpo = `<div class="card"><h3>Minhas vendas · ${st.n}</h3>
+      ${lista.map(v=>`<div class="row small" style="padding:7px 0;border-bottom:1px dashed var(--line)">
+        <span>${fdt(v.created_at)} · <span class="mut">#${v.id.slice(0,8)}</span>
+          ${(v.ep_sale_payments||[]).map(p=>mlabel(p.method)).join(" + ")}</span>
+        <b class="right num">${fmt(v.total)}</b></div>`).join("") || `<p class="mut small">Nenhuma venda registrada neste caixa ainda.</p>`}
+    </div>`;
+  }
+
+  else if(T==="sangrias"){
+    corpo = `<div class="card">
+      <div class="row"><h3 style="margin:0">Sangrias · ${fmt(st.totalSang)}</h3>
+        <button class="btn small primary right" onclick="modalSangria()">+ Nova sangria</button></div>
+      <p class="mut small" style="margin:6px 0 0">Retirada de dinheiro da gaveta. Toda sangria desconta do valor esperado no fechamento.</p>
+      <div style="height:6px"></div>
+      ${st.sangrias.map(s=>`<div class="row small" style="padding:7px 0;border-bottom:1px dashed var(--line)">
+        <span>${fdt(s.created_at)} · ${esc(s.reason)} · resp.: ${esc(s.responsible)}</span>
+        <b class="right num" style="color:var(--bad)">−${fmt(s.amount)}</b>
         ${ME.role==="admin"?`<button class="btn small ghost" onclick='editSangria(${JSON.stringify(s).replace(/'/g,"&#39;")})'>✎</button>
-        <button class="btn small danger" onclick="delSangria('${s.id}')">✕</button>`:""}</div>`).join("") || `<p class="mut small">Nenhuma sangria.</p>`}
-    </div>
-    <button class="btn danger block" onclick="modalFechamento()">Fechar meu caixa</button>`;
+        <button class="btn small danger" onclick="delSangria('${s.id}')">✕</button>`:""}</div>`).join("") || `<p class="mut small">Nenhuma sangria registrada.</p>`}
+    </div>`;
+  }
+
+  else if(T==="fechar"){
+    corpo = `<div class="card">
+      <h3>Fechar meu caixa</h3>
+      <p class="mut small">Você vai conferir o dinheiro contado na gaveta contra o valor esperado. Divergência exige justificativa. Depois de fechado, só o Administrador Master reabre.</p>
+      <div class="row" style="padding:8px 0"><span>Esperado na gaveta</span><b class="right num" style="font-size:18px">${fmt(espDin)}</b></div>
+      <div style="height:6px"></div>
+      <button class="btn danger block" onclick="modalFechamento()">Iniciar fechamento</button>
+    </div>`;
+  }
+
+  el.innerHTML = topo + corpo;
 }
+
 function editSangria(s){
   openModal(`<h2>Editar sangria</h2>
     <label>Valor</label><input id="egVal" inputmode="decimal" value="${s.amount}">
@@ -860,7 +985,7 @@ async function confirmarFechamento(){
   if(error){ toast("Erro: "+error.message); return; }
   audit("fechamento_caixa",{register_id:REG.id,esperado:espDin,contado,diferenca:diff});
   closeModal(); toast(diff===0?"Caixa fechado sem divergência":"Caixa fechado com divergência de "+fmt(diff));
-  REG=null; go("caixa");
+  REG=null; CAIXA_TAB="resumo"; go("caixa");
 }
 
 /* ---------- DADOS DO EVENTO (agregados) ---------- */
