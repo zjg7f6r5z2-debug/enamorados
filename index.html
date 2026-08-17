@@ -64,7 +64,7 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 .navbtn{flex:0 0 auto;white-space:nowrap;border:1px solid var(--line);background:transparent;color:var(--mut);
   border-radius:99px;padding:9px 16px;cursor:pointer;font-weight:600;font-size:14px}
 .navbtn.on{background:var(--txt);border-color:var(--txt);color:#FCFAF4}
-main{max-width:1080px;margin:0 auto;padding:14px 14px 90px}
+main{max-width:1080px;margin:0 auto;padding:14px 14px 240px}
 .view{display:none}.view.on{display:block}
 /* Auth */
 #authView{max-width:400px;margin:8vh auto;padding:0 16px}
@@ -151,7 +151,7 @@ svg text{font-family:inherit}
   .brand{font-size:15px;line-height:1.15}
   #topbar #topEvent{display:none}
   #topUser{font-size:11px;max-width:34vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  main{padding:12px 12px 90px}
+  main{padding:12px 12px 240px}
   .grid2,.grid3{grid-template-columns:1fr}
   h2{font-size:20px}
   #totalBig{font-size:22px}
@@ -342,7 +342,7 @@ function go(v){
   $("view-"+v).classList.add("on");
   const nb=$("nav-"+v); if(nb) nb.classList.add("on");
   $("cartBar").style.display = (v==="pdv" && REG) ? "block" : "none";
-  ajustaEspacoCarrinho();
+  agendaEspacoCarrinho();
   clearInterval(POLL);
   const R = { pdv:renderPDV, caixa:renderCaixa, painel:renderPainel, evento:renderRelatorios, produtos:renderProdutos, vendas:renderVendas, usuarios:renderUsuarios, relatorios:renderRelatorios, auditoria:renderAuditoria };
   (R[v]||(()=>{}))();
@@ -427,7 +427,7 @@ function renderPDV(){
       <button class="btn primary block" onclick="abrirCaixa()">Abrir caixa e começar a vender</button>
     </div>`;
     $("cartBar").style.display="none";
-    ajustaEspacoCarrinho();
+    agendaEspacoCarrinho();
     return;
   }
   el.innerHTML = `<div class="row" style="margin-bottom:10px">
@@ -474,22 +474,28 @@ function renderCart(){
       <button class="btn small ghost" onclick="splitPay()" ${items.length?'':'disabled'}>Dividir pgto</button>
       <button class="btn primary right" style="min-width:170px" onclick="concluirVenda()" ${items.length&&PAY?'':'disabled'}>CONCLUIR VENDA</button>
     </div>`;
-  ajustaEspacoCarrinho();
+  agendaEspacoCarrinho();
 }
 /* A barra do carrinho é fixa no rodapé e muda de altura conforme os itens.
-   Reserva o espaço equivalente no fim da página para não cobrir os últimos produtos. */
+   Reserva o espaço equivalente no fim da página para não cobrir os últimos produtos.
+   Obs.: no Safari, offsetParent é null em elementos position:fixed — por isso a
+   visibilidade é checada pelo display computado e a altura por getBoundingClientRect. */
+let _ESPACO = -1;
 function ajustaEspacoCarrinho(){
   const bar = $("cartBar"), m = document.querySelector("main");
-  if(!m) return;
-  requestAnimationFrame(()=>{
-    const vis = bar && bar.style.display !== "none" && bar.offsetParent !== null;
-    const h = vis ? bar.offsetHeight : 0;
-    m.style.paddingBottom = (h + 28) + "px";
-    const t = $("toast"); if(t) t.style.bottom = (h + 16) + "px";
-  });
+  if(!bar || !m) return;
+  const vis = getComputedStyle(bar).display !== "none";
+  const h = vis ? Math.ceil(bar.getBoundingClientRect().height) : 0;
+  const pad = h + 32;
+  if(pad === _ESPACO) return;
+  _ESPACO = pad;
+  m.style.paddingBottom = pad + "px";
+  const t = $("toast"); if(t) t.style.bottom = (h + 16) + "px";
 }
-window.addEventListener("resize", ajustaEspacoCarrinho);
-window.addEventListener("orientationchange", ajustaEspacoCarrinho);
+function agendaEspacoCarrinho(){ ajustaEspacoCarrinho(); requestAnimationFrame(ajustaEspacoCarrinho); }
+if(window.ResizeObserver){ new ResizeObserver(()=>ajustaEspacoCarrinho()).observe($("cartBar")); }
+window.addEventListener("resize", agendaEspacoCarrinho);
+window.addEventListener("orientationchange", agendaEspacoCarrinho);
 
 function setPay(k){ PAY=k; renderCart(); }
 function clearCart(){ CART={}; PAY=null; renderCart(); }
@@ -577,7 +583,7 @@ async function abrirCaixa(){
   }).select("*").single();
   if(error){ toast("Erro ao abrir caixa: "+error.message); return; }
   REG = data; audit("abertura_caixa",{register_id:REG.id,fundo:cash});
-  toast("Caixa aberto"); renderPDV(); $("cartBar").style.display="block"; ajustaEspacoCarrinho();
+  toast("Caixa aberto"); renderPDV(); $("cartBar").style.display="block"; agendaEspacoCarrinho();
 }
 async function regStats(regId){
   const { data:sales } = await sb.from("ep_sales")
