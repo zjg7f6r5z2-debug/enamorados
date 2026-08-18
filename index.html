@@ -118,13 +118,17 @@ main{max-width:1080px;margin:0 auto;padding:14px 14px 240px}
   background:var(--brand-soft);letter-spacing:.02em}
 .thumb{width:38px;height:38px;border-radius:8px;object-fit:cover;background:var(--panel2);border:1px solid var(--line);display:block}
 .thumb.ph{display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--mut);background:var(--brand-soft);font-size:15px}
-#cartBar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--panel);
+#cartBar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--panel);max-height:76vh;overflow:hidden;
   border-top:1px solid var(--line);padding:10px 14px calc(10px + env(safe-area-inset-bottom))}
 #cartBar .inner{max-width:1080px;margin:0 auto}
 .payrow{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:8px 0}
 .paybtn{border:1px solid var(--line);background:#FFFDF8;border-radius:9px;padding:9px 4px;cursor:pointer;
   font-size:12px;font-weight:700;text-align:center;color:var(--txt)}
 .paybtn.on{background:var(--txt);border-color:var(--txt);color:#FCFAF4}
+.cartlist{max-height:30vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.cartlist.rolando{border-bottom:1px solid var(--line)}
+.carthead{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:800;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--mut);padding:2px 0 6px}
 .cartline{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:14px}
 .qbtn{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);cursor:pointer;font-weight:800;color:var(--txt)}
 #totalBig{font-size:26px;font-weight:900;letter-spacing:-.02em}
@@ -216,7 +220,7 @@ svg text{font-family:inherit}
     </div>
     <div id="authMsg" class="small" style="color:var(--bad);margin-top:10px"></div>
   </div>
-  <div id="verFooter">Versão <b>1.0</b></div>
+  <div id="verFooter">Versão <b>1.1</b></div>
 </div>
 
 <!-- APP -->
@@ -540,12 +544,18 @@ function cartTotal(){ return Object.entries(CART).reduce((s,[pid,q])=>{ const p=
 function renderCart(){
   const items = Object.entries(CART);
   const total = cartTotal();
+  const nItens = items.reduce((s,[,q])=>s+q,0);
   $("cartInner").innerHTML = `
+    ${items.length?`<div class="carthead">
+      <span>Carrinho · ${items.length} ${items.length===1?"produto":"produtos"} · ${nItens} un</span>
+    </div>`:""}
+    <div class="cartlist ${items.length>3?"rolando":""}">
     ${items.map(([pid,q])=>{ const p=PRODUCTS.find(x=>x.id===pid); if(!p) return "";
       return `<div class="cartline"><span style="flex:1">${esc(p.name)}</span>
         <button class="qbtn" onclick="decCart('${pid}')">−</button><b class="num">${q}</b>
         <button class="qbtn" onclick="addCart('${pid}')">+</button>
         <b class="num" style="width:86px;text-align:right">${fmt(p.price*q)}</b></div>`; }).join("")}
+    </div>
     <div class="payrow">${METHODS.map(([k,l])=>`<button class="paybtn ${PAY===k?'on':''}" onclick="setPay('${k}')">${l}</button>`).join("")}</div>
     <div class="row">
       <div><div class="mut small">TOTAL</div><div id="totalBig" class="num">${fmt(total)}</div></div>
