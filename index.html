@@ -220,7 +220,7 @@ svg text{font-family:inherit}
     </div>
     <div id="authMsg" class="small" style="color:var(--bad);margin-top:10px"></div>
   </div>
-  <div id="verFooter">Versão <b>1.1</b></div>
+  <div id="verFooter">Versão <b>1.2</b></div>
 </div>
 
 <!-- APP -->
@@ -506,20 +506,27 @@ function desenharGradePDV(){
   const grid = $("pdvGrid"); if(!grid) return;
   const q = PDV_BUSCA.trim().toLowerCase();
   const cardHTML = p => {
-    const low = p.stock<=p.min_stock, out = p.stock<=0;
-    return `<button class="pbtn ${low?'low':''} ${out?'out':''}" onclick="addCart('${p.id}')">
+    const nCores = filhosDe(p.id).length;
+    const est = estoqueTotal(p);
+    const low = est<=p.min_stock, out = est<=0;
+    return `<button class="pbtn ${low?'low':''} ${out?'out':''}" onclick="${nCores?`modalCores('${p.id}')`:`addCart('${p.id}')`}">
       ${prodImgHTML(p)}
       <span class="pbody">
         ${p.code?`<span class="pcode">${esc(p.code)}</span>`:""}
         <span class="pn">${esc(p.name)}</span>
         <span class="pp num">${fmt(p.price)}</span>
-        <span class="ps num">estoque ${p.stock}</span>
+        <span class="ps num">${nCores?`${nCores} cores · ${est} un`:`estoque ${est}`}</span>
       </span>
     </button>`;
   };
-  let lista = PRODUCTS.filter(p=>p.active);
-  if(q) lista = lista.filter(p=>
-    String(p.name||"").toLowerCase().includes(q) || String(p.code||"").toLowerCase().includes(q));
+  // Só produtos-raiz na grade: as cores aparecem ao tocar no produto.
+  let lista = PRODUCTS.filter(p=>p.active && !p.parent_id);
+  if(q){
+    const bate = p => String(p.name||"").toLowerCase().includes(q) || String(p.code||"").toLowerCase().includes(q);
+    // Buscar pelo código de uma cor (EB-249.2) traz o produto principal dela.
+    const paisPorFilho = new Set(PRODUCTS.filter(p=>p.parent_id && bate(p)).map(p=>p.parent_id));
+    lista = lista.filter(p=> bate(p) || paisPorFilho.has(p.id));
+  }
 
   let grupos = groupByCat(lista);
   // Numa categoria específica (e sem busca), mostra só ela e sem cabeçalho repetido.
@@ -535,6 +542,7 @@ function desenharGradePDV(){
 }
 function addCart(pid){
   const p = PRODUCTS.find(x=>x.id===pid); if(!p) return;
+  if(temFilhos(pid)){ modalCores(pid); return; }   // produto com cores: escolher a cor
   const atual = CART[pid]||0;
   if(atual+1 > Number(p.stock)){ toast(`Estoque de ${p.name}: só ${p.stock} un disponível`); return; }
   CART[pid]=atual+1; renderCart();
@@ -1076,7 +1084,8 @@ async function renderPainel(){
   const D = await eventData(EVENT.id); const A = aggregate(D);
   const openRegs = D.regs.filter(r=>r.status==="aberto");
   const diverg = D.regs.filter(r=>r.status==="fechado" && Math.abs(Number(r.difference))>=0.005);
-  const lowStock = D.prods.filter(p=>p.active && p.stock<=p.min_stock);
+  const filhos = new Set(D.prods.filter(p=>p.parent_id).map(p=>p.parent_id));
+  const lowStock = D.prods.filter(p=>p.active && p.stock<=p.min_stock && !filhos.has(p.id));
   const rankFat = Object.values(A.perOp).sort((a,b)=>b.total-a.total);
   const topProd = Object.values(A.perProd).sort((a,b)=>b.total-a.total).slice(0,6);
   const saidas = A.despesas + A.compras;
@@ -1298,7 +1307,7 @@ async function renderProdutos(){
       <button class="btn small" onclick="modalAjuste()">Perda / consumo / entrada</button>
       <button class="btn small" onclick="modalDespesa()">+ Compra / despesa</button>
     </div>
-    ${groupByCat(PRODUCTS.filter(p=>!FILTRO_SEM_FOTO || !p.image_url)).map(g=>`
+    ${groupByCat(PRODUCTS.filter(p=>!p.parent_id).filter(p=>!FILTRO_SEM_FOTO || !p.image_url || filhosDe(p.id).some(f=>!f.image_url))).map(g=>`
       <div class="card tbl-wrap">
         <div class="row" style="margin-bottom:6px">
           <b style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--brand)">${esc(g.name||"Todos os produtos")}</b>
@@ -1313,10 +1322,11 @@ async function renderProdutos(){
           </td>
           <td class="codecell">${p.code?esc(p.code):'<span class="mut">—</span>'}</td>
           <td style="width:46px">${p.image_url?prodImgHTML(p,"thumb"):`<div class="thumb ph falta">sem<br>foto</div>`}</td>
-          <td>${esc(p.name)}${p.active?"":' <span class="tag bad">inativo</span>'}</td>
+          <td>${esc(p.name)}${p.active?"":' <span class="tag bad">inativo</span>'}
+            ${filhosDe(p.id).length?`<button class="btn small ghost" onclick="modalVariacoes('${p.id}')">${filhosDe(p.id).length} cores${filhosDe(p.id).some(f=>!f.image_url)?" ⚠":""}</button>`:""}</td>
           <td class="num">${fmt(p.price)}</td><td class="num">${fmt(p.cost)}</td>
           <td class="num">${markupPct(p)===null?'<span class="mut">—</span>':markupPct(p).toFixed(0)+"%"}</td>
-          <td class="num" style="color:${p.stock<=p.min_stock?'var(--bad)':'inherit'}">${p.stock}</td>
+          <td class="num" style="color:${estoqueTotal(p)<=p.min_stock?'var(--bad)':'inherit'}">${estoqueTotal(p)}</td>
           <td class="num">${p.min_stock}</td>
           <td><button class="btn small" onclick="modalProduto('${p.id}')">Editar</button>
           <button class="btn small danger" onclick="delProduto('${p.id}','${esc(p.name)}')">Excluir</button></td></tr>`).join("")}
@@ -1508,7 +1518,117 @@ async function moveCategoria(cid, dir){
   await loadCategories(); modalCategorias();
 }
 
-function modalProduto(pid){
+/* ---------- VARIAÇÕES POR COR ----------
+   Uma variação é um produto-filho (parent_id preenchido), com código EB-249.1,
+   EB-249.2… Cada cor tem foto e estoque próprios, então a venda baixa o estoque
+   da cor certa. O produto-pai não é vendido direto: ao tocar nele, abre a lista
+   de cores. */
+const filhosDe = pid => PRODUCTS.filter(p=>p.parent_id===pid)
+  .sort((a,b)=> String(a.code||"").localeCompare(String(b.code||""), "pt-BR", {numeric:true}));
+const temFilhos = pid => PRODUCTS.some(p=>p.parent_id===pid);
+const estoqueTotal = p => temFilhos(p.id) ? filhosDe(p.id).reduce((s,f)=>s+Number(f.stock||0),0) : Number(p.stock||0);
+
+function proximoCodigoVar(pai){
+  const base = pai.code || "SEM";
+  const usados = filhosDe(pai.id).map(f=>{
+    const m = String(f.code||"").match(/\.(\d+)$/); return m ? parseInt(m[1]) : 0;
+  });
+  return `${base}.${Math.max(0, ...usados) + 1}`;
+}
+
+/* Tela que o operador vê ao tocar num produto com cores. */
+function modalCores(pid){
+  const pai = PRODUCTS.find(p=>p.id===pid); if(!pai) return;
+  const fs = filhosDe(pid).filter(f=>f.active);
+  openModal(`<h2>${esc(pai.name)}</h2>
+    <p class="mut small">${pai.code?`<span class="pcode">${esc(pai.code)}</span> · `:""}${fmt(pai.price)} · escolha a cor</p>
+    <div class="pdvgrid">
+      ${fs.map(f=>{
+        const out = Number(f.stock)<=0;
+        return `<button class="pbtn ${out?'out':''}" onclick="addCartCor('${f.id}')">
+          ${prodImgHTML(f)}
+          <span class="pbody">
+            ${f.code?`<span class="pcode">${esc(f.code)}</span>`:""}
+            <span class="pn">${esc(f.name)}</span>
+            <span class="pp num">${fmt(f.price)}</span>
+            <span class="ps num">estoque ${f.stock}</span>
+          </span></button>`;
+      }).join("") || `<p class="mut small">Nenhuma cor cadastrada.</p>`}
+    </div>
+    <div style="height:14px"></div>
+    <button class="btn block" onclick="closeModal()">Voltar</button>`);
+}
+function addCartCor(fid){ closeModal(); addCart(fid); }
+
+/* Cadastro das cores (Admin) — é aqui que se coloca a foto de cada uma. */
+function modalVariacoes(pid){
+  const pai = PRODUCTS.find(p=>p.id===pid); if(!pai) return;
+  const fs = filhosDe(pid);
+  const semFoto = fs.filter(f=>!f.image_url).length;
+  openModal(`<h2>Cores de ${esc(pai.name)}</h2>
+    <p class="mut small">Código base <span class="pcode">${esc(pai.code||"—")}</span>.
+      Cada cor recebe um código próprio (${esc(pai.code||"—")}.1, ${esc(pai.code||"—")}.2…) e tem foto e estoque separados.
+      ${fs.length?`<b>${semFoto}</b> de ${fs.length} ainda sem foto.`:""}</p>
+    ${fs.map(f=>`<div class="ordrow">
+      ${f.image_url?prodImgHTML(f,"thumb"):`<div class="thumb ph falta">sem<br>foto</div>`}
+      <span class="on"><span class="pcode">${esc(f.code||"—")}</span> ${esc(f.name)}
+        <span class="mut small">· ${f.stock} un</span></span>
+      <button class="btn small primary" onclick="modalProduto('${f.id}','${pid}')">Foto / editar</button>
+      <button class="btn small danger" onclick="delVariacao('${f.id}')">✕</button>
+    </div>`).join("") || `<p class="mut small">Nenhuma cor cadastrada ainda.</p>`}
+    ${Number(pai.stock)>0 && fs.length ? `<div class="alertline amber" style="margin-top:10px">
+      ⚠️ ${pai.stock} un ainda não foram atribuídas a nenhuma cor — enquanto isso, elas não aparecem para venda.
+    </div>`:""}
+    <div style="height:10px"></div>
+    <label>Nova cor</label>
+    <div class="grid2">
+      <div><input id="vcNome" placeholder="ex.: Azul" onkeydown="if(event.key==='Enter')addVariacao('${pid}')"></div>
+      <div><input id="vcQtd" inputmode="numeric" placeholder="Quantidade" value="1"></div>
+    </div>
+    <p class="mut small">A quantidade sai do estoque do produto principal (hoje: ${pai.stock} un livres).</p>
+    <button class="btn primary block" onclick="addVariacao('${pid}')">Adicionar cor</button>
+    <div style="height:12px"></div>
+    <button class="btn block" onclick="closeModal();renderProdutos()">Concluir</button>`);
+}
+async function addVariacao(pid){
+  const pai = PRODUCTS.find(p=>p.id===pid); if(!pai) return;
+  const nome = ($("vcNome").value||"").trim();
+  const qtd = parseInt($("vcQtd").value)||0;
+  if(!nome){ toast("Informe o nome da cor"); return; }
+  if(qtd < 0){ toast("Quantidade inválida"); return; }
+  if(qtd > Number(pai.stock)){ toast(`O produto principal só tem ${pai.stock} un livres`); return; }
+  const code = proximoCodigoVar(pai);
+  const row = {
+    event_id: EVENT.id, parent_id: pai.id, code,
+    name: `${pai.name} — ${nome}`,
+    category_id: pai.category_id, price: pai.price, cost: pai.cost,
+    stock: qtd, stock_initial: qtd, min_stock: 0, active: true,
+    margin_pct: pai.margin_pct, sort_order: Number(pai.sort_order)||0
+  };
+  const ins = await sb.from("ep_products").insert(row);
+  if(ins.error){ toast(ins.error.message); return; }
+  // a quantidade sai do estoque do pai, para não contar duas vezes
+  if(qtd > 0){
+    await sb.from("ep_products").update({ stock: Number(pai.stock) - qtd }).eq("id", pai.id);
+  }
+  audit("variacao_criada", { parent:pai.code, code, qtd });
+  await loadProducts(); modalVariacoes(pid); toast(`${code} criada`);
+}
+async function delVariacao(fid){
+  const f = PRODUCTS.find(p=>p.id===fid); if(!f) return;
+  if(!confirm(`Excluir a cor "${f.name}"? As ${f.stock} un voltam para o produto principal.`)) return;
+  const pai = PRODUCTS.find(p=>p.id===f.parent_id);
+  const del = await sb.from("ep_products").delete().eq("id", fid);
+  if(del.error){ toast("Não foi possível excluir (pode haver vendas ligadas). "+del.error.message); return; }
+  if(pai && Number(f.stock)>0){
+    await sb.from("ep_products").update({ stock: Number(pai.stock) + Number(f.stock) }).eq("id", pai.id);
+  }
+  audit("variacao_excluida", { code:f.code });
+  await loadProducts();
+  if(pai) modalVariacoes(pai.id); else renderProdutos();
+}
+
+function modalProduto(pid, voltarPara){
   const p = PRODUCTS.find(x=>x.id===pid) || {code:"",name:"",price:"",cost:0,stock_initial:0,stock:0,min_stock:5,active:true,image_url:null,category_id:null,margin_pct:null};
   PROD_IMG = p.image_url || null;
   const mk = markupPct(p);
@@ -1539,18 +1659,24 @@ function modalProduto(pid){
     <div class="grid3"><div><label>Estoque inicial</label><input id="prSt0" inputmode="numeric" value="${p.stock_initial}"></div>
     <div><label>Estoque atual</label><input id="prSt" inputmode="numeric" value="${p.stock}"></div>
     <div><label>Mínimo (alerta)</label><input id="prMin" inputmode="numeric" value="${p.min_stock}"></div></div>
+    ${pid && !p.parent_id ? `<div class="calcbox" style="background:var(--panel2)">
+      <div class="row"><span>Cores / variações deste item</span>
+        <button class="btn small primary right" onclick="closeModal();modalVariacoes('${pid}')">${filhosDe(pid).length?`Ver ${filhosDe(pid).length} cores`:"Cadastrar cores"}</button></div>
+    </div><div style="height:6px"></div>` : ""}
     <label>Ativo</label><select id="prAtivo"><option value="1" ${p.active?"selected":""}>Sim</option><option value="0" ${p.active?"":"selected"}>Não</option></select>
     <div style="height:12px"></div>
-    <button class="btn primary block" onclick="salvarProduto('${pid||""}')">Salvar</button>`);
+    <button class="btn primary block" onclick="salvarProduto('${pid||""}','${voltarPara||""}')">Salvar</button>`);
   atualizaCalcBox();
 }
-async function salvarProduto(pid){
+async function salvarProduto(pid, voltarPara){
   const cost = N($("prCost").value), price = N($("prPrice").value);
   const row = { event_id:EVENT.id, code: ($("prCode").value.trim().toUpperCase() || null), name:$("prName").value.trim(), price, cost,
     stock_initial:parseInt($("prSt0").value)||0, stock:parseInt($("prSt").value)||0, min_stock:parseInt($("prMin").value)||0,
     active:$("prAtivo").value==="1", image_url: PROD_IMG || null,
     category_id: $("prCat").value || null,
     margin_pct: cost>0 ? Math.round((price-cost)/cost*1000)/10 : null };
+  const orig = PRODUCTS.find(x=>x.id===pid);
+  if(orig && orig.parent_id) row.parent_id = orig.parent_id;
   if(!row.name||row.price<=0){ toast("Nome e preço são obrigatórios"); return; }
   if(!pid){
     // novo produto entra no fim da sua categoria
@@ -1560,7 +1686,9 @@ async function salvarProduto(pid){
   const r = pid ? await sb.from("ep_products").update(row).eq("id",pid) : await sb.from("ep_products").insert(row);
   if(r.error){ toast(r.error.message); return; }
   audit(pid?"produto_editado":"produto_criado",{name:row.name});
-  PROD_IMG=null; closeModal(); toast("Salvo"); renderProdutos();
+  PROD_IMG=null; closeModal(); toast("Salvo");
+  await loadProducts();
+  if(voltarPara) modalVariacoes(voltarPara); else renderProdutos();
 }
 function modalConferencia(phase){
   openModal(`<h2>Conferência de estoque — ${phase}</h2>
