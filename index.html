@@ -220,7 +220,7 @@ svg text{font-family:inherit}
     </div>
     <div id="authMsg" class="small" style="color:var(--bad);margin-top:10px"></div>
   </div>
-  <div id="verFooter">Versão <b>1.2</b></div>
+  <div id="verFooter">Versão <b>1.3</b></div>
 </div>
 
 <!-- APP -->
@@ -270,6 +270,19 @@ const N = v => { const n = parseFloat(String(v).replace(",", ".")); return isNaN
 const METHODS = [["dinheiro","Dinheiro"],["pix","Pix"],["debito","Débito"],["credito","Crédito"],["outro","Outro"]];
 const mlabel = m => (METHODS.find(x=>x[0]===m)||["","?"])[1];
 const inicial = n => String(n||"?").trim().charAt(0).toUpperCase();
+/* Níveis de acesso, do menor para o maior. O número decide o que cada um enxerga. */
+const NIVEIS = [
+  ["operador",  "Operador",     1, "Vende e cuida do próprio caixa."],
+  ["supervisor","Supervisor",   2, "Tudo do operador + produtos, estoque, preços e vendas."],
+  ["admin",     "Administrador",3, "Tudo do supervisor + painel ao vivo e relatórios."],
+  ["master",    "Admin Master", 4, "Acesso total, incluindo usuários, níveis e auditoria."]
+];
+const nivelNum = r => (NIVEIS.find(n=>n[0]===r)||NIVEIS[0])[2];
+const nivelNome = r => (NIVEIS.find(n=>n[0]===r)||NIVEIS[0])[1];
+const meuNivel = () => nivelNum(ME?.role);
+const podeVer = n => meuNivel() >= n;
+const isAdmin = () => podeVer(3);
+const isMaster = () => meuNivel() === 4;
 const primeiroNome = n => String(n||"").trim().split(/\s+/)[0] || "";
 function saudacaoHora(){ const h=new Date().getHours(); return h<12?"Bom dia":(h<18?"Boa tarde":"Boa noite"); }
 function helloHTML(sub){
@@ -317,12 +330,12 @@ async function boot(){
   }
   ME = prof;
   $("authView").style.display="none"; $("app").style.display="block";
-  $("topUser").textContent = ME.name + (ME.role==="admin" ? " · Admin Master" : " · Operador");
+  $("topUser").textContent = ME.name + " · " + nivelNome(ME.role);
   try{ sb.realtime.setAuth(session.access_token); }catch(e){}
   await loadEvent();
   iniciarRealtime();
   buildNav();
-  go(ME.role==="admin" ? "painel" : "pdv");
+  go(isAdmin() ? "painel" : "pdv");
   syncQueue();
 }
 
@@ -331,7 +344,7 @@ async function loadEvent(){
   let { data } = await sb.from("ep_events").select("*").eq("status","aberto").order("created_at",{ascending:false}).limit(1);
   EVENT = (data && data[0]) || null;
   // App dedicado a um único evento: se o admin entrar e não houver evento, cria automaticamente.
-  if(!EVENT && ME && ME.role==="admin"){
+  if(!EVENT && ME && isAdmin()){
     const ins = await sb.from("ep_events").insert({ name:EVENT_NAME, created_by:ME.id }).select("*").single();
     if(!ins.error) EVENT = ins.data;
   }
@@ -367,13 +380,19 @@ function groupByCat(list){
 }
 
 /* ---------- NAV ---------- */
-const TABS_OP = [["pdv","Vender"],["caixa","Meu caixa"]];
-const TABS_ADM = [["painel","Painel"],["pdv","Vender"],["caixa","Meu caixa"],["produtos","Produtos"],["vendas","Vendas"],["usuarios","Usuários"],["relatorios","Relatórios"],["auditoria","Auditoria"]];
+/* Cada aba exige um nível mínimo. */
+const TABS = [
+  ["painel","Painel",3],["pdv","Vender",1],["caixa","Meu caixa",1],
+  ["produtos","Produtos",2],["vendas","Vendas",2],
+  ["relatorios","Relatórios",3],["usuarios","Usuários",4],["auditoria","Auditoria",4]
+];
 function buildNav(){
-  const tabs = ME.role==="admin" ? TABS_ADM : TABS_OP;
+  const tabs = TABS.filter(t=>podeVer(t[2]));
   $("nav").innerHTML = tabs.map(t=>`<button class="navbtn" id="nav-${t[0]}" onclick="go('${t[0]}')">${t[1]}</button>`).join("");
 }
 function go(v){
+  const t = TABS.find(x=>x[0]===v);
+  if(t && !podeVer(t[2])){ toast("Seu nível de acesso não permite abrir essa aba"); return; }
   document.querySelectorAll(".view").forEach(x=>x.classList.remove("on"));
   document.querySelectorAll(".navbtn").forEach(x=>x.classList.remove("on"));
   $("view-"+v).classList.add("on");
@@ -904,7 +923,7 @@ async function renderCaixa(){
       ${st.sangrias.map(s=>`<div class="row small" style="padding:7px 0;border-bottom:1px dashed var(--line)">
         <span>${fdt(s.created_at)} · ${esc(s.reason)} · resp.: ${esc(s.responsible)}</span>
         <b class="right num" style="color:var(--bad)">−${fmt(s.amount)}</b>
-        ${ME.role==="admin"?`<button class="btn small ghost" onclick='editSangria(${JSON.stringify(s).replace(/'/g,"&#39;")})'>✎</button>
+        ${isAdmin()?`<button class="btn small ghost" onclick='editSangria(${JSON.stringify(s).replace(/'/g,"&#39;")})'>✎</button>
         <button class="btn small danger" onclick="delSangria('${s.id}')">✕</button>`:""}</div>`).join("") || `<p class="mut small">Nenhuma sangria registrada.</p>`}
     </div>`;
   }
@@ -1762,7 +1781,7 @@ function filterVendas(){
       ${s.status==="cancelada"?'<span class="tag bad">cancelada</span>':""}
       <span class="mut small">#${s.id.slice(0,8)} · ${fdt(s.created_at)} · ${esc(window._pn(s.operator_id))}</span>
       ${s.status==="ok"?`<button class="btn small danger right" onclick="modalCancelar('${s.id}')">Cancelar</button>`:""}
-      ${ME.role==="admin"?`<button class="btn small ghost ${s.status==="ok"?"":"right"}" onclick="delVenda('${s.id}','${s.status}')">Excluir</button>`:""}
+      ${isAdmin()?`<button class="btn small ghost ${s.status==="ok"?"":"right"}" onclick="delVenda('${s.id}','${s.status}')">Excluir</button>`:""}
     </div>
     <div class="mut small">${(s.ep_sale_items||[]).map(i=>`${i.qty}x ${esc(i.product_name)}`).join(", ")}
       · ${(s.ep_sale_payments||[]).map(p=>mlabel(p.method)).join(" + ")}
@@ -1802,19 +1821,51 @@ async function renderUsuarios(){
       <label>Nome</label><input id="uName">
       <label>E-mail (login)</label><input id="uEmail" type="email" inputmode="email">
       <label>Senha (mín. 6)</label><input id="uPass">
-      <label>Papel</label><select id="uRole"><option value="operador">Operador de caixa</option><option value="admin">Admin Master</option></select>
+      <label>Nível de acesso</label>
+      <select id="uRole" onchange="descNivel('uRole','uRoleDesc')">
+        ${NIVEIS.filter(n=>n[2]<=meuNivel()).map(n=>`<option value="${n[0]}" ${n[0]==="operador"?"selected":""}>${n[1]}</option>`).join("")}
+      </select>
+      <p id="uRoleDesc" class="mut small">${NIVEIS[0][3]}</p>
       <div style="height:12px"></div>
       <button class="btn primary" onclick="criarUsuario()">Criar conta</button>
     </div>
+
+    <div class="card"><h3>O que cada nível pode fazer</h3>
+      ${NIVEIS.map(n=>`<div class="row small" style="padding:6px 0;border-bottom:1px dashed var(--line)">
+        <b style="min-width:110px">${n[1]}</b><span class="mut">${n[3]}</span></div>`).join("")}
+    </div>
+
     <div class="card tbl-wrap"><h3>Usuários</h3><table>
-      <tr><th>Nome</th><th>Papel</th><th>Status</th><th></th></tr>
-      ${(users||[]).map(u=>`<tr><td>${esc(u.name)}</td><td>${u.role==="admin"?"Admin Master":"Operador"}</td>
+      <tr><th>Nome</th><th>Nível de acesso</th><th>Status</th><th></th></tr>
+      ${(users||[]).map(u=>{
+        // Só o Master mexe em níveis; ninguém rebaixa alguém acima de si.
+        const podeMexer = isMaster() && u.id!==ME.id;
+        return `<tr><td>${esc(u.name)}${u.id===ME.id?' <span class="mut small">(você)</span>':""}</td>
+        <td>${podeMexer
+          ? `<select onchange="mudarNivel('${u.id}',this.value,'${esc(u.name)}')" style="margin:0;padding:7px 8px">
+              ${NIVEIS.map(n=>`<option value="${n[0]}" ${u.role===n[0]?"selected":""}>${n[1]}</option>`).join("")}
+             </select>`
+          : `<span class="tag ${u.role==="master"?"amber":""}">${nivelNome(u.role)}</span>`}</td>
         <td>${u.active?'<span class="tag ok">ativo</span>':'<span class="tag bad">inativo</span>'}</td>
         <td class="row" style="gap:6px">
           <button class="btn small" onclick="modalSenha('${u.id}','${esc(u.name)}')">Senha</button>
-          ${u.id!==ME.id?`<button class="btn small ${u.active?'danger':'ok'}" onclick="toggleUser('${u.id}',${!u.active})">${u.active?"Desativar":"Ativar"}</button>`:""}
-        </td></tr>`).join("")}
-    </table></div>`;
+          ${u.id!==ME.id && (isMaster() || nivelNum(u.role)<3)?`<button class="btn small ${u.active?'danger':'ok'}" onclick="toggleUser('${u.id}',${!u.active})">${u.active?"Desativar":"Ativar"}</button>`:""}
+        </td></tr>`; }).join("")}
+    </table>
+    ${isMaster()?"":'<p class="mut small">Apenas o Admin Master altera níveis de acesso.</p>'}
+    </div>`;
+}
+function descNivel(selId, pId){
+  const v = $(selId).value;
+  const n = NIVEIS.find(x=>x[0]===v);
+  if(n && $(pId)) $(pId).textContent = n[3];
+}
+async function mudarNivel(uid, role, nome){
+  if(!confirm(`Alterar ${nome} para ${nivelNome(role)}?`)){ renderUsuarios(); return; }
+  const { error } = await sb.from("ep_profiles").update({ role }).eq("id", uid);
+  if(error){ toast(error.message); renderUsuarios(); return; }
+  audit("nivel_alterado",{user_id:uid, role});
+  toast(`${nome} agora é ${nivelNome(role)}`); renderUsuarios();
 }
 async function criarUsuario(){
   const name=$("uName").value.trim(), email=$("uEmail").value.trim(), pass=$("uPass").value, role=$("uRole").value;
