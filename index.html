@@ -308,7 +308,7 @@ svg text{font-family:inherit}
     </div>
     <div id="authMsg" class="small" style="color:var(--bad);margin-top:10px"></div>
   </div>
-  <div id="verFooter">Versão <b>1.6</b></div>
+  <div id="verFooter">Versão <b>1.7</b></div>
 </div>
 
 <!-- APP -->
@@ -1214,10 +1214,6 @@ async function renderPainel(){
     ${helloHTML("Acompanhe o evento em tempo real.")}
     <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Painel</h2>
       <span class="mut small right"><span class="livedot"></span>ao vivo</span></div>
-    ${EVENT && EVENT.status!=="encerrado" && isAdmin() ? `<button class="btn danger block" style="margin-bottom:12px"
-      onclick="modalEncerrarEvento()">🏁 Encerrar evento e fechar todos os caixas</button>` : ""}
-    ${EVENT && EVENT.status==="encerrado" ? `<div class="alertline ok" style="margin-bottom:12px">
-      Evento encerrado em ${fdt(EVENT.closed_at)} · <a href="#" onclick="relatorioFinal('${EVENT.id}');return false"><b>abrir relatório final</b></a></div>` : ""}
 
     <!-- HERO: total arrecadado + composição -->
     <div class="card hero">
@@ -1520,7 +1516,7 @@ async function relatorioFinal(eid){
         <tr><td>Encerrado em</td><td>${ev.closed_at?fd(ev.closed_at):"—"}</td></tr>
         <tr><td>Emitido em</td><td>${fd(Date.now())}</td></tr>
         <tr><td>Responsável</td><td>${esc(ME.name)} — ${nivelNome(ME.role)}</td></tr>
-        <tr><td>Sistema</td><td>PDV do Encontro · versão 1.6</td></tr>
+        <tr><td>Sistema</td><td>PDV do Encontro · versão 1.7</td></tr>
       </table>
       <div class="resumocapa">
         <div><span>Faturamento</span><b>${fmt(A.total)}</b></div>
@@ -1736,7 +1732,7 @@ async function relatorioFinal(eid){
         <div><div class="ass"></div><span>Responsável pelo evento</span></div>
         <div><div class="ass"></div><span>Tesouraria</span></div>
       </div>
-      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v1.6</p>
+      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v1.7</p>
     </section>`;
 
   const doc = capa + s1 + s2 + s3 + s4 + s6 + s8 + s9 + s10 + s11;
