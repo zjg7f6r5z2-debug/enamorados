@@ -220,7 +220,7 @@ svg text{font-family:inherit}
     </div>
     <div id="authMsg" class="small" style="color:var(--bad);margin-top:10px"></div>
   </div>
-  <div id="verFooter">Versão <b>1.3</b></div>
+  <div id="verFooter">Versão <b>1.4</b></div>
 </div>
 
 <!-- APP -->
@@ -369,6 +369,12 @@ async function loadCategories(){
   else { CATEGORIES = JSON.parse(localStorage.getItem("ep_cats_"+EVENT.id)||"[]"); }
 }
 const catName = id => (CATEGORIES.find(c=>c.id===id)||{}).name || null;
+/* Categorias de peça única (itens religiosos) não são repostas durante o evento,
+   então avisar "estoque baixo" nelas só gera ruído. O aviso é ligado por categoria. */
+const alertaAtivo = p => {
+  const c = CATEGORIES.find(c=>c.id===p.category_id);
+  return c ? c.alerta_estoque !== false : true;
+};
 /* Agrupa produtos pelas categorias, na ordem definida pelo admin.
    Produtos sem categoria vão para um grupo "Outros" no fim. */
 function groupByCat(list){
@@ -527,7 +533,7 @@ function desenharGradePDV(){
   const cardHTML = p => {
     const nCores = filhosDe(p.id).length;
     const est = estoqueTotal(p);
-    const low = est<=p.min_stock, out = est<=0;
+    const low = alertaAtivo(p) && est<=p.min_stock, out = est<=0;
     return `<button class="pbtn ${low?'low':''} ${out?'out':''}" onclick="${nCores?`modalCores('${p.id}')`:`addCart('${p.id}')`}">
       ${prodImgHTML(p)}
       <span class="pbody">
@@ -1104,7 +1110,7 @@ async function renderPainel(){
   const openRegs = D.regs.filter(r=>r.status==="aberto");
   const diverg = D.regs.filter(r=>r.status==="fechado" && Math.abs(Number(r.difference))>=0.005);
   const filhos = new Set(D.prods.filter(p=>p.parent_id).map(p=>p.parent_id));
-  const lowStock = D.prods.filter(p=>p.active && p.stock<=p.min_stock && !filhos.has(p.id));
+  const lowStock = D.prods.filter(p=>p.active && p.stock<=p.min_stock && !filhos.has(p.id) && alertaAtivo(p));
   const rankFat = Object.values(A.perOp).sort((a,b)=>b.total-a.total);
   const topProd = Object.values(A.perProd).sort((a,b)=>b.total-a.total).slice(0,6);
   const saidas = A.despesas + A.compras;
@@ -1345,7 +1351,7 @@ async function renderProdutos(){
             ${filhosDe(p.id).length?`<button class="btn small ghost" onclick="modalVariacoes('${p.id}')">${filhosDe(p.id).length} cores${filhosDe(p.id).some(f=>!f.image_url)?" ⚠":""}</button>`:""}</td>
           <td class="num">${fmt(p.price)}</td><td class="num">${fmt(p.cost)}</td>
           <td class="num">${markupPct(p)===null?'<span class="mut">—</span>':markupPct(p).toFixed(0)+"%"}</td>
-          <td class="num" style="color:${estoqueTotal(p)<=p.min_stock?'var(--bad)':'inherit'}">${estoqueTotal(p)}</td>
+          <td class="num" style="color:${(alertaAtivo(p) && estoqueTotal(p)<=p.min_stock)?'var(--bad)':'inherit'}">${estoqueTotal(p)}</td>
           <td class="num">${p.min_stock}</td>
           <td><button class="btn small" onclick="modalProduto('${p.id}')">Editar</button>
           <button class="btn small danger" onclick="delProduto('${p.id}','${esc(p.name)}')">Excluir</button></td></tr>`).join("")}
@@ -1479,13 +1485,16 @@ function modalOrdenar(){
 /* ---------- CATEGORIAS ---------- */
 function modalCategorias(){
   openModal(`<h2>Categorias</h2>
-    <p class="mut small">A grade de vendas é separada por categoria, na ordem abaixo. Produtos sem categoria aparecem em “Outros”, no fim.</p>
+    <p class="mut small">A grade de vendas é separada por categoria, na ordem abaixo. Produtos sem categoria aparecem em “Outros”, no fim.<br>
+      🔔 = avisa no painel quando o estoque ficar baixo · 🔕 = sem aviso (para itens de peça única, que não são repostos).</p>
     ${CATEGORIES.map((c,i)=>{
       const n = PRODUCTS.filter(p=>p.category_id===c.id).length;
       return `<div class="ordrow">
         <span class="on">${esc(c.name)} <span class="mut small">· ${n} ${n===1?"produto":"produtos"}</span></span>
         <button class="arrow" onclick="moveCategoria('${c.id}',-1)" ${i===0?"disabled":""}>↑</button>
         <button class="arrow" onclick="moveCategoria('${c.id}',1)" ${i===CATEGORIES.length-1?"disabled":""}>↓</button>
+        <button class="btn small ${c.alerta_estoque!==false?'primary':''}" onclick="toggleAlertaCat('${c.id}')"
+          title="Avisar quando o estoque ficar baixo">${c.alerta_estoque!==false?"🔔":"🔕"}</button>
         <button class="btn small ghost" onclick="renomearCategoria('${c.id}')">✎</button>
         <button class="btn small danger" onclick="delCategoria('${c.id}')">✕</button>
       </div>`;
@@ -1506,6 +1515,15 @@ async function addCategoria(){
   if(error){ toast(error.message); return; }
   audit("categoria_criada",{name});
   await loadCategories(); modalCategorias(); toast("Categoria criada");
+}
+async function toggleAlertaCat(cid){
+  const c = CATEGORIES.find(x=>x.id===cid); if(!c) return;
+  const novo = !(c.alerta_estoque !== false);
+  const { error } = await sb.from("ep_categories").update({ alerta_estoque: novo }).eq("id", cid);
+  if(error){ toast(error.message); return; }
+  audit("alerta_categoria",{id:cid, ativo:novo});
+  await loadCategories(); modalCategorias();
+  toast(novo ? `Alerta ligado em ${c.name}` : `Alerta desligado em ${c.name}`);
 }
 async function renomearCategoria(cid){
   const c = CATEGORIES.find(x=>x.id===cid); if(!c) return;
