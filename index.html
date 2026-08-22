@@ -138,8 +138,15 @@ main{max-width:1080px;margin:0 auto;padding:14px 14px 240px}
 .resumovenda .desc b{color:var(--bad)}
 .resumovenda .lucro b{color:var(--ok)}
 .resumovenda .prej{color:var(--bad);font-weight:800}
-.cartlist{max-height:30vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.cartlist{max-height:26vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .cartlist.rolando{border-bottom:1px solid var(--line)}
+.carttoggle{display:flex;align-items:center;gap:9px;width:100%;background:transparent;border:0;
+  padding:8px 2px;cursor:pointer;color:var(--txt);text-align:left;font:inherit}
+.carttoggle .seta{width:22px;height:22px;flex:0 0 auto;border-radius:6px;background:var(--panel2);
+  border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--mut)}
+.carttoggle .resumo{flex:1;min-width:0;font-size:12.5px;font-weight:800;letter-spacing:.03em;
+  text-transform:uppercase;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.carttoggle .valor{font-variant-numeric:tabular-nums;font-weight:800;color:var(--brand)}
 .carthead{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:800;letter-spacing:.06em;
   text-transform:uppercase;color:var(--mut);padding:2px 0 6px}
 .cartline{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:14px}
@@ -321,7 +328,7 @@ svg text{font-family:inherit}
     </div>
     <div id="authMsg" class="small" style="color:var(--bad);margin-top:10px"></div>
   </div>
-  <div id="verFooter">Versão <b>1.9</b></div>
+  <div id="verFooter">Versão <b>2.0</b></div>
 </div>
 
 <!-- APP -->
@@ -841,17 +848,26 @@ function descontoPorValor(pid){
 }
 function limparDescontos(){ DESC_ITEM={}; DESC_GERAL=0; renderCart(); toast("Descontos removidos"); }
 
+/* O carrinho fica recolhido por padrão: no celular, a lista crescia e engolia a
+   grade de produtos. Recolhido, mostra só a contagem e o valor; um toque abre. */
+let CART_ABERTO = false;
+function toggleCarrinho(){ CART_ABERTO = !CART_ABERTO; renderCart(); }
 function renderCart(){
   const R = resumoCarrinho();
   const items = Object.entries(CART);
   const nItens = items.reduce((s,[,q])=>s+q,0);
   const temDesc = R.descTotal > 0.004;
+  const aberto = CART_ABERTO && items.length>0;
   $("cartInner").innerHTML = `
-    ${items.length?`<div class="carthead">
-      <span>Carrinho · ${items.length} ${items.length===1?"produto":"produtos"} · ${nItens} un</span>
-      <button class="btn small ghost" style="margin-left:auto" onclick="modalDesconto('')">% Desconto</button>
+    ${items.length?`<div class="carthead" style="padding:0">
+      <button class="carttoggle" onclick="toggleCarrinho()">
+        <span class="seta">${aberto?"▾":"▸"}</span>
+        <span class="resumo">${items.length} ${items.length===1?"produto":"produtos"} · ${nItens} un</span>
+        <span class="valor">${fmt(R.total)}</span>
+      </button>
+      ${aberto?`<button class="btn small ghost" onclick="modalDesconto('')">% Desconto</button>`:""}
     </div>`:""}
-    <div class="cartlist ${items.length>3?"rolando":""}">
+    <div class="cartlist ${items.length>3?"rolando":""}" style="${aberto?"":"display:none"}">
     ${R.linhas.map(l=>`<div class="cartline">
         <span style="flex:1;min-width:0">${esc(l.p.name)}
           ${descontoItem(l.p.id)?`<span class="descflag">−${descontoItem(l.p.id)}%</span>`:""}</span>
@@ -862,7 +878,7 @@ function renderCart(){
       </div>`).join("")}
     </div>
 
-    ${items.length?`<div class="resumovenda">
+    ${items.length&&aberto?`<div class="resumovenda">
       <div class="rv"><span>Subtotal</span><b class="num">${fmt(R.bruto)}</b></div>
       ${temDesc?`<div class="rv desc"><span>Desconto ${R.pctTotal.toFixed(1).replace(".",",")}%
         ${R.descGeral>0.004&&R.descItens>0.004?`<span class="mut">(itens + geral)</span>`:""}</span>
@@ -875,7 +891,8 @@ function renderCart(){
 
     <div class="payrow">${METHODS.map(([k,l])=>`<button class="paybtn ${PAY===k?'on':''}" onclick="setPay('${k}')">${l}</button>`).join("")}</div>
     <div class="row">
-      <div><div class="mut small">TOTAL</div><div id="totalBig" class="num">${fmt(R.total)}</div></div>
+      <div><div class="mut small">TOTAL${temDesc?` <span style="color:var(--bad);font-weight:800">−${R.pctTotal.toFixed(0)}%</span>`:""}</div>
+        <div id="totalBig" class="num">${fmt(R.total)}</div></div>
       <button class="btn small ghost" onclick="clearCart()" ${items.length?'':'disabled'}>Limpar</button>
       <button class="btn small ghost" onclick="splitPay()" ${items.length?'':'disabled'}>Dividir pgto</button>
       <button class="btn primary right" style="min-width:170px" onclick="concluirVenda()" ${items.length&&PAY&&!SALVANDO?'':'disabled'}>${SALVANDO?"GRAVANDO…":"CONCLUIR VENDA"}</button>
@@ -901,7 +918,7 @@ window.addEventListener("resize", agendaEspacoCarrinho);
 window.addEventListener("orientationchange", agendaEspacoCarrinho);
 
 function setPay(k){ PAY=k; renderCart(); }
-function clearCart(){ CART={}; PAY=null; DESC_ITEM={}; DESC_GERAL=0; renderCart(); }
+function clearCart(){ CART={}; PAY=null; DESC_ITEM={}; DESC_GERAL=0; CART_ABERTO=false; renderCart(); }
 function splitPay(){
   const total = cartTotal();
   openModal(`<h2>Dividir pagamento</h2><p class="mut small">Total: <b class="num">${fmt(total)}</b>. Informe o valor de cada forma (restante fica na última preenchida).</p>
@@ -945,7 +962,7 @@ async function _saveSale(payments){
     total, gross:R.bruto, discount:R.descTotal, discount_note: nota||null,
     custo:R.custo, items, payments, created_at:new Date().toISOString() };
   items.forEach(i=>{ const p=PRODUCTS.find(x=>x.id===i.product_id); if(p) p.stock-=i.qty; });
-  CART={}; PAY=null; DESC_ITEM={}; DESC_GERAL=0; renderPDV();
+  CART={}; PAY=null; DESC_ITEM={}; DESC_GERAL=0; CART_ABERTO=false; renderPDV();
   if(!navigator.onLine){ queueSale(sale); toast("Venda salva OFFLINE — será sincronizada"); return; }
   const ok = await pushSale(sale);
   if(ok){ LAST_SALE=sale; toast("Venda concluída — "+fmt(total)); showReceiptOffer(sale); }
@@ -1720,7 +1737,7 @@ async function relatorioFinal(eid){
         <tr><td>Encerrado em</td><td>${ev.closed_at?fd(ev.closed_at):"—"}</td></tr>
         <tr><td>Emitido em</td><td>${fd(Date.now())}</td></tr>
         <tr><td>Responsável</td><td>${esc(ME.name)} — ${nivelNome(ME.role)}</td></tr>
-        <tr><td>Sistema</td><td>PDV do Encontro · versão 1.9</td></tr>
+        <tr><td>Sistema</td><td>PDV do Encontro · versão 2.0</td></tr>
       </table>
       <div class="resumocapa">
         <div><span>Faturamento</span><b>${fmt(A.total)}</b></div>
@@ -1936,7 +1953,7 @@ async function relatorioFinal(eid){
         <div><div class="ass"></div><span>Responsável pelo evento</span></div>
         <div><div class="ass"></div><span>Tesouraria</span></div>
       </div>
-      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v1.9</p>
+      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v2.0</p>
     </section>`;
 
   const doc = capa + s1 + s2 + s3 + s4 + s6 + s8 + s9 + s10 + s11;
