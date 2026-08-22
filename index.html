@@ -125,6 +125,19 @@ main{max-width:1080px;margin:0 auto;padding:14px 14px 240px}
 .paybtn{border:1px solid var(--line);background:#FFFDF8;border-radius:9px;padding:9px 4px;cursor:pointer;
   font-size:12px;font-weight:700;text-align:center;color:var(--txt)}
 .paybtn.on{background:var(--txt);border-color:var(--txt);color:#FCFAF4}
+.descgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:8px 0 14px}
+.descbtn{border:1px solid var(--line);background:var(--panel2);border-radius:9px;padding:11px 4px;
+  font-weight:800;font-size:13px;color:var(--txt);cursor:pointer}
+.descbtn.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.descflag{display:inline-block;font-size:10px;font-weight:800;color:#fff;background:var(--bad);
+  border-radius:5px;padding:1px 5px;margin-left:5px;vertical-align:middle}
+.resumovenda{border-top:1px solid var(--line);padding:8px 0 4px;margin-top:4px}
+.resumovenda .rv{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:3px 0}
+.resumovenda .rv span{flex:1}
+.resumovenda .rv b{font-variant-numeric:tabular-nums}
+.resumovenda .desc b{color:var(--bad)}
+.resumovenda .lucro b{color:var(--ok)}
+.resumovenda .prej{color:var(--bad);font-weight:800}
 .cartlist{max-height:30vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .cartlist.rolando{border-bottom:1px solid var(--line)}
 .carthead{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:800;letter-spacing:.06em;
@@ -308,7 +321,7 @@ svg text{font-family:inherit}
     </div>
     <div id="authMsg" class="small" style="color:var(--bad);margin-top:10px"></div>
   </div>
-  <div id="verFooter">Versão <b>1.7</b></div>
+  <div id="verFooter">Versão <b>1.9</b></div>
 </div>
 
 <!-- APP -->
@@ -499,31 +512,118 @@ function go(v){
   if(v==="painel") POLL = setInterval(atualizarPainel, 30000);
 }
 
-/* ---------- IMAGENS DE PRODUTO ---------- */
-function compressImg(file, max=900, quality=.82){
-  return new Promise((resolve,reject)=>{
-    if(!file || !String(file.type).startsWith("image/")) return reject(new Error("Selecione um arquivo de imagem"));
-    const url = URL.createObjectURL(file), img = new Image();
-    img.onload = ()=>{
-      URL.revokeObjectURL(url);
-      let w = img.naturalWidth, h = img.naturalHeight;
-      const s = Math.min(1, max/Math.max(w,h));
-      w = Math.max(1, Math.round(w*s)); h = Math.max(1, Math.round(h*s));
-      const c = document.createElement("canvas"); c.width=w; c.height=h;
-      const ctx = c.getContext("2d");
-      ctx.fillStyle="#fff"; ctx.fillRect(0,0,w,h);
-      ctx.drawImage(img,0,0,w,h);
-      c.toBlob(b => b ? resolve(b) : reject(new Error("Falha ao processar a imagem")), "image/jpeg", quality);
-    };
-    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error("Não foi possível abrir essa imagem")); };
-    img.src = url;
+/* ---------- IMAGENS DE PRODUTO ----------
+   O caminho antigo assumia comportamentos que só valem no Safari/desktop e quebrava
+   no Android: arquivo sem MIME type vindo da Galeria/Google Fotos, ausência de
+   crypto.randomUUID em WebViews antigas, falha de canvas.toBlob e blob: URL
+   recusada por alguns navegadores. Aqui cada etapa tem alternativa. */
+
+/* Identificador único com alternativa para navegadores sem crypto.randomUUID */
+function uid(){
+  try{ if(window.crypto && crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
+  const b = new Uint8Array(16);
+  try{ crypto.getRandomValues(b); }
+  catch(e){ for(let i=0;i<16;i++) b[i] = Math.floor(Math.random()*256); }
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, x => x.toString(16).padStart(2,"0")).join("");
+  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+}
+
+const EXT_IMG = /\.(jpe?g|png|webp|gif|bmp|heic|heif|avif)$/i;
+function pareceImagem(f){
+  const t = String(f.type||"");
+  if(t.startsWith("image/")) return true;
+  if(!t && EXT_IMG.test(f.name||"")) return true;   // Android às vezes manda type vazio
+  return EXT_IMG.test(f.name||"");
+}
+function lerDataURL(file){
+  return new Promise((res,rej)=>{
+    const r = new FileReader();
+    r.onload = ()=>res(r.result);
+    r.onerror = ()=>rej(new Error("Não foi possível ler o arquivo"));
+    r.readAsDataURL(file);
   });
 }
-async function uploadProdImg(file){
+function carregarImg(src){
+  return new Promise((res,rej)=>{
+    const img = new Image();
+    img.onload = ()=>res(img);
+    img.onerror = ()=>rej(new Error("decode"));
+    try{ img.crossOrigin = "anonymous"; }catch(e){}
+    img.src = src;
+  });
+}
+/* Três tentativas de decodificar: createImageBitmap (melhor no Android),
+   blob: URL e, por fim, data: URL. */
+async function decodificarImagem(file){
+  if(window.createImageBitmap){
+    try{ return await createImageBitmap(file); }catch(e){}
+  }
+  let url = null;
+  try{
+    url = URL.createObjectURL(file);
+    const im = await carregarImg(url);
+    return im;
+  }catch(e){}
+  finally{ if(url) setTimeout(()=>URL.revokeObjectURL(url), 4000); }
+  try{
+    return await carregarImg(await lerDataURL(file));
+  }catch(e){
+    throw new Error("formato não suportado por este navegador (HEIC do iPhone costuma dar isso — envie como JPG)");
+  }
+}
+async function canvasParaBlob(c, q){
+  if(c.toBlob){
+    const b = await new Promise(r=>{ try{ c.toBlob(r, "image/jpeg", q); }catch(e){ r(null); } });
+    if(b) return b;
+  }
+  // alternativa para navegadores sem toBlob
+  const d = c.toDataURL("image/jpeg", q);
+  const bin = atob(d.split(",")[1]);
+  const arr = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type:"image/jpeg" });
+}
+async function compressImg(file, max=900, quality=.82){
+  if(!file) throw new Error("Nenhum arquivo selecionado");
+  if(!pareceImagem(file)) throw new Error("Esse arquivo não parece ser uma imagem");
+  const im = await decodificarImagem(file);
+  const W = im.width || im.naturalWidth, H = im.height || im.naturalHeight;
+  if(!W || !H) throw new Error("Imagem sem dimensões válidas");
+  let alvo = max, blob = null;
+  // celulares antigos podem não dar conta de um canvas grande: vai reduzindo
+  for(const tentativa of [alvo, 700, 500, 360]){
+    try{
+      const s = Math.min(1, tentativa/Math.max(W,H));
+      const w = Math.max(1, Math.round(W*s)), h = Math.max(1, Math.round(H*s));
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0,0,w,h);
+      ctx.drawImage(im, 0, 0, w, h);
+      blob = await canvasParaBlob(c, quality);
+      if(blob && blob.size <= 4.5*1024*1024) break;   // limite do servidor é 5 MB
+    }catch(e){ blob = null; }
+  }
+  try{ if(im.close) im.close(); }catch(e){}
+  if(!blob) throw new Error("não foi possível processar a imagem neste aparelho");
+  return blob;
+}
+async function uploadProdImg(file, onStatus){
+  const st = onStatus || (()=>{});
+  st("Preparando a imagem…");
   const blob = await compressImg(file);
-  const path = `${EVENT.id}/${crypto.randomUUID()}.jpg`;
-  const { error } = await sb.storage.from(IMG_BUCKET).upload(path, blob, { contentType:"image/jpeg", cacheControl:"31536000", upsert:false });
-  if(error) throw error;
+  st(`Enviando ${(blob.size/1024).toFixed(0)} KB…`);
+  const path = `${EVENT.id}/${uid()}.jpg`;
+  const { error } = await sb.storage.from(IMG_BUCKET)
+    .upload(path, blob, { contentType:"image/jpeg", cacheControl:"31536000", upsert:false });
+  if(error){
+    const m = String(error.message||"");
+    if(/row-level security|Unauthorized|403/i.test(m)) throw new Error("seu nível de acesso não permite enviar fotos");
+    if(/exceeded|too large|413/i.test(m)) throw new Error("a imagem ficou grande demais");
+    if(/mime|content type/i.test(m)) throw new Error("formato recusado pelo servidor");
+    if(/Failed to fetch|Load failed|network/i.test(m)) throw new Error("falha de conexão ao enviar — tente de novo");
+    throw new Error(m || "falha no envio");
+  }
   return sb.storage.from(IMG_BUCKET).getPublicUrl(path).data.publicUrl;
 }
 let PROD_IMG = null;
@@ -536,10 +636,10 @@ function imgPickHTML(){
         <button class="btn small" onclick="$('prFile').click()">${p?"Trocar foto":"Escolher foto"}</button>
         ${p?`<button class="btn small ghost" onclick="limparImg()">Remover</button>`:""}
       </div>
-      <div id="prImgStatus" class="mut small" style="margin-top:6px">JPG, PNG ou WEBP. A foto é reduzida antes de subir.</div>
+      <div id="prImgStatus" class="mut small" style="margin-top:6px">JPG, PNG ou WEBP — funciona no Android e no iPhone. A foto é reduzida antes de subir.</div>
     </div>
   </div>
-  <input type="file" id="prFile" accept="image/*" style="display:none" onchange="onPickImg(this)">
+  <input type="file" id="prFile" accept="image/*,.jpg,.jpeg,.png,.webp,.heic" style="display:none" onchange="onPickImg(this)">
   <label>Ou cole o link de uma imagem</label>
   <input id="prImgUrl" inputmode="url" placeholder="https://…" value="${p?esc(p):""}" oninput="PROD_IMG=this.value.trim()||null">`;
 }
@@ -548,13 +648,15 @@ function limparImg(){ PROD_IMG=null; refreshImgPick(); }
 async function onPickImg(input){
   const f = input.files && input.files[0]; input.value="";
   if(!f) return;
-  const st = $("prImgStatus"); if(st){ st.textContent="Enviando foto…"; }
+  const msg = t => { const st = $("prImgStatus"); if(st){ st.textContent = t; st.style.color = ""; } };
+  msg("Preparando a imagem…");
   try{
-    PROD_IMG = await uploadProdImg(f);
+    PROD_IMG = await uploadProdImg(f, msg);
     refreshImgPick();
     toast("Foto enviada");
   }catch(e){
-    if(st) st.textContent = "Não deu para enviar: " + (e.message||e);
+    const st = $("prImgStatus");
+    if(st){ st.textContent = "Não deu para enviar: " + (e.message||e); st.style.color = "var(--bad)"; }
   }
 }
 
@@ -666,25 +768,114 @@ function addCart(pid){
   CART[pid]=atual+1; renderCart();
 }
 function decCart(pid){ if(!CART[pid])return; CART[pid]--; if(CART[pid]<=0) delete CART[pid]; renderCart(); }
-function cartTotal(){ return Object.entries(CART).reduce((s,[pid,q])=>{ const p=PRODUCTS.find(x=>x.id===pid); return s + (p?Number(p.price)*q:0); },0); }
+/* ---------- DESCONTOS ----------
+   DESC_ITEM guarda o % de desconto de cada produto; DESC_GERAL o % aplicado
+   sobre o total. Os dois podem coexistir: o geral incide sobre o que sobrou
+   depois dos descontos por item. */
+let DESC_ITEM = {}, DESC_GERAL = 0;
+
+const precoItem = (p,q) => Number(p.price)*q;
+function descontoItem(pid){ return Number(DESC_ITEM[pid]||0); }
+function linhaCarrinho(pid,q){
+  const p = PRODUCTS.find(x=>x.id===pid);
+  if(!p) return null;
+  const bruto = precoItem(p,q);
+  const d = bruto * descontoItem(pid)/100;
+  return { p, q, bruto, desc:d, liquido:bruto-d, custo:Number(p.cost||0)*q };
+}
+function resumoCarrinho(){
+  const linhas = Object.entries(CART).map(([pid,q])=>linhaCarrinho(pid,q)).filter(Boolean);
+  const bruto = linhas.reduce((s,l)=>s+l.bruto,0);
+  const descItens = linhas.reduce((s,l)=>s+l.desc,0);
+  const aposItens = bruto - descItens;
+  const descGeral = aposItens * (Number(DESC_GERAL)||0)/100;
+  const total = Math.max(0, aposItens - descGeral);
+  const custo = linhas.reduce((s,l)=>s+l.custo,0);
+  const descTotal = descItens + descGeral;
+  return { linhas, bruto, descItens, descGeral, descTotal, total, custo,
+           lucro: total - custo,
+           margem: total>0 ? (total-custo)/total*100 : 0,
+           pctTotal: bruto>0 ? descTotal/bruto*100 : 0 };
+}
+function cartTotal(){ return resumoCarrinho().total; }
+
+function modalDesconto(pid){
+  const R = resumoCarrinho();
+  const p = pid ? PRODUCTS.find(x=>x.id===pid) : null;
+  const atual = p ? descontoItem(pid) : DESC_GERAL;
+  const base = p ? precoItem(p, CART[pid]||0) : R.bruto - R.descItens;
+  const alvo = p ? `em <b>${esc(p.name)}</b>` : "no <b>total da venda</b>";
+  openModal(`<h2>Aplicar desconto</h2>
+    <p class="mut small">Desconto ${alvo} · base de ${fmt(base)}</p>
+    <div class="descgrid">
+      ${[0,5,10,15,20,25,30,50].map(v=>`<button class="descbtn ${Number(atual)===v?'on':''}"
+        onclick="setDesconto('${pid||""}',${v})">${v===0?"Sem desconto":v+"%"}</button>`).join("")}
+    </div>
+    <label>Outro percentual (%)</label>
+    <input id="descPct" inputmode="decimal" placeholder="ex.: 12,5" value="${atual||""}">
+    <button class="btn block" onclick="setDesconto('${pid||""}', N($('descPct').value))">Aplicar percentual</button>
+    <div style="height:10px"></div>
+    <label>Ou informe o valor do desconto em R$</label>
+    <input id="descVal" inputmode="decimal" placeholder="0,00">
+    <button class="btn block" onclick="descontoPorValor('${pid||""}')">Aplicar valor em reais</button>
+    <div style="height:12px"></div>
+    ${!p && Object.keys(DESC_ITEM).length?`<p class="mut small">Há descontos aplicados em produtos específicos.
+      O desconto geral incide sobre o valor que sobra depois deles.</p>`:""}
+    <button class="btn block" onclick="closeModal()">Fechar</button>`);
+}
+function setDesconto(pid, pct){
+  pct = Math.max(0, Math.min(100, Number(pct)||0));
+  if(pid){ if(pct>0) DESC_ITEM[pid]=pct; else delete DESC_ITEM[pid]; }
+  else DESC_GERAL = pct;
+  closeModal(); renderCart();
+  if(pct>0) toast(`Desconto de ${pct.toString().replace(".",",")}% aplicado`);
+}
+function descontoPorValor(pid){
+  const v = N($("descVal").value);
+  const R = resumoCarrinho();
+  const p = pid ? PRODUCTS.find(x=>x.id===pid) : null;
+  const base = p ? precoItem(p, CART[pid]||0) : R.bruto - R.descItens;
+  if(base<=0){ toast("Sem base para calcular"); return; }
+  if(v>base){ toast("O desconto não pode passar de "+fmt(base)); return; }
+  setDesconto(pid, Math.round(v/base*10000)/100);
+}
+function limparDescontos(){ DESC_ITEM={}; DESC_GERAL=0; renderCart(); toast("Descontos removidos"); }
+
 function renderCart(){
+  const R = resumoCarrinho();
   const items = Object.entries(CART);
-  const total = cartTotal();
   const nItens = items.reduce((s,[,q])=>s+q,0);
+  const temDesc = R.descTotal > 0.004;
   $("cartInner").innerHTML = `
     ${items.length?`<div class="carthead">
       <span>Carrinho · ${items.length} ${items.length===1?"produto":"produtos"} · ${nItens} un</span>
+      <button class="btn small ghost" style="margin-left:auto" onclick="modalDesconto('')">% Desconto</button>
     </div>`:""}
     <div class="cartlist ${items.length>3?"rolando":""}">
-    ${items.map(([pid,q])=>{ const p=PRODUCTS.find(x=>x.id===pid); if(!p) return "";
-      return `<div class="cartline"><span style="flex:1">${esc(p.name)}</span>
-        <button class="qbtn" onclick="decCart('${pid}')">−</button><b class="num">${q}</b>
-        <button class="qbtn" onclick="addCart('${pid}')">+</button>
-        <b class="num" style="width:86px;text-align:right">${fmt(p.price*q)}</b></div>`; }).join("")}
+    ${R.linhas.map(l=>`<div class="cartline">
+        <span style="flex:1;min-width:0">${esc(l.p.name)}
+          ${descontoItem(l.p.id)?`<span class="descflag">−${descontoItem(l.p.id)}%</span>`:""}</span>
+        <button class="qbtn" onclick="decCart('${l.p.id}')">−</button><b class="num">${l.q}</b>
+        <button class="qbtn" onclick="addCart('${l.p.id}')">+</button>
+        <button class="qbtn" onclick="modalDesconto('${l.p.id}')" title="Desconto neste produto">%</button>
+        <b class="num" style="width:86px;text-align:right">${l.desc?`<s class="mut" style="font-size:11px">${fmt(l.bruto)}</s><br>`:""}${fmt(l.liquido)}</b>
+      </div>`).join("")}
     </div>
+
+    ${items.length?`<div class="resumovenda">
+      <div class="rv"><span>Subtotal</span><b class="num">${fmt(R.bruto)}</b></div>
+      ${temDesc?`<div class="rv desc"><span>Desconto ${R.pctTotal.toFixed(1).replace(".",",")}%
+        ${R.descGeral>0.004&&R.descItens>0.004?`<span class="mut">(itens + geral)</span>`:""}</span>
+        <b class="num">−${fmt(R.descTotal)}</b>
+        <button class="btn small ghost" onclick="limparDescontos()">limpar</button></div>`:""}
+      <div class="rv"><span>Custo das mercadorias</span><b class="num">${fmt(R.custo)}</b></div>
+      <div class="rv ${R.lucro<0?"prej":"lucro"}"><span>${R.lucro<0?"PREJUÍZO":"Lucro desta venda"}</span>
+        <b class="num">${fmt(R.lucro)} · ${R.margem.toFixed(0)}%</b></div>
+    </div>`:""}
+
     <div class="payrow">${METHODS.map(([k,l])=>`<button class="paybtn ${PAY===k?'on':''}" onclick="setPay('${k}')">${l}</button>`).join("")}</div>
     <div class="row">
-      <div><div class="mut small">TOTAL</div><div id="totalBig" class="num">${fmt(total)}</div></div>
+      <div><div class="mut small">TOTAL</div><div id="totalBig" class="num">${fmt(R.total)}</div></div>
       <button class="btn small ghost" onclick="clearCart()" ${items.length?'':'disabled'}>Limpar</button>
       <button class="btn small ghost" onclick="splitPay()" ${items.length?'':'disabled'}>Dividir pgto</button>
       <button class="btn primary right" style="min-width:170px" onclick="concluirVenda()" ${items.length&&PAY&&!SALVANDO?'':'disabled'}>${SALVANDO?"GRAVANDO…":"CONCLUIR VENDA"}</button>
@@ -710,7 +901,7 @@ window.addEventListener("resize", agendaEspacoCarrinho);
 window.addEventListener("orientationchange", agendaEspacoCarrinho);
 
 function setPay(k){ PAY=k; renderCart(); }
-function clearCart(){ CART={}; PAY=null; renderCart(); }
+function clearCart(){ CART={}; PAY=null; DESC_ITEM={}; DESC_GERAL=0; renderCart(); }
 function splitPay(){
   const total = cartTotal();
   openModal(`<h2>Dividir pagamento</h2><p class="mut small">Total: <b class="num">${fmt(total)}</b>. Informe o valor de cada forma (restante fica na última preenchida).</p>
@@ -737,12 +928,24 @@ async function saveSale(payments){
   try{ await _saveSale(payments); } finally { SALVANDO = false; renderCart(); }
 }
 async function _saveSale(payments){
-  const items = Object.entries(CART).map(([pid,q])=>{ const p=PRODUCTS.find(x=>x.id===pid);
-    return { product_id:pid, product_name:p.name, qty:q, unit_price:Number(p.price), subtotal:Number(p.price)*q }; });
-  const total = items.reduce((s,i)=>s+i.subtotal,0);
-  const sale = { offline_id: crypto.randomUUID(), event_id:EVENT.id, register_id:REG.id, operator_id:ME.id, total, items, payments, created_at:new Date().toISOString() };
+  const R = resumoCarrinho();
+  // o desconto geral é rateado entre os itens, para o relatório por produto ficar correto
+  const aposItens = R.bruto - R.descItens;
+  const fator = aposItens>0 ? (aposItens - R.descGeral)/aposItens : 1;
+  const items = R.linhas.map(l=>({
+    product_id: l.p.id, product_name: l.p.name, qty: l.q,
+    unit_price: Number(l.p.price), unit_cost: Number(l.p.cost||0),
+    subtotal: Math.round(l.liquido*fator*100)/100,
+    discount: Math.round((l.bruto - l.liquido*fator)*100)/100
+  }));
+  const total = R.total;
+  const nota = [R.descItens>0.004?`itens: ${fmt(R.descItens)}`:null,
+                R.descGeral>0.004?`geral ${DESC_GERAL}%: ${fmt(R.descGeral)}`:null].filter(Boolean).join(" · ");
+  const sale = { offline_id: uid(), event_id:EVENT.id, register_id:REG.id, operator_id:ME.id,
+    total, gross:R.bruto, discount:R.descTotal, discount_note: nota||null,
+    custo:R.custo, items, payments, created_at:new Date().toISOString() };
   items.forEach(i=>{ const p=PRODUCTS.find(x=>x.id===i.product_id); if(p) p.stock-=i.qty; });
-  CART={}; PAY=null; renderPDV();
+  CART={}; PAY=null; DESC_ITEM={}; DESC_GERAL=0; renderPDV();
   if(!navigator.onLine){ queueSale(sale); toast("Venda salva OFFLINE — será sincronizada"); return; }
   const ok = await pushSale(sale);
   if(ok){ LAST_SALE=sale; toast("Venda concluída — "+fmt(total)); showReceiptOffer(sale); }
@@ -755,7 +958,8 @@ async function pushSale(s){
   try{
     const { data, error } = await sb.rpc("ep_push_sale", { p: {
       offline_id:s.offline_id, event_id:s.event_id, register_id:s.register_id,
-      operator_id:s.operator_id, total:s.total, created_at:s.created_at,
+      operator_id:s.operator_id, total:s.total, gross:s.gross, discount:s.discount,
+      discount_note:s.discount_note, created_at:s.created_at,
       items:s.items, payments:s.payments
     }});
     if(error) return false;
@@ -1516,7 +1720,7 @@ async function relatorioFinal(eid){
         <tr><td>Encerrado em</td><td>${ev.closed_at?fd(ev.closed_at):"—"}</td></tr>
         <tr><td>Emitido em</td><td>${fd(Date.now())}</td></tr>
         <tr><td>Responsável</td><td>${esc(ME.name)} — ${nivelNome(ME.role)}</td></tr>
-        <tr><td>Sistema</td><td>PDV do Encontro · versão 1.7</td></tr>
+        <tr><td>Sistema</td><td>PDV do Encontro · versão 1.9</td></tr>
       </table>
       <div class="resumocapa">
         <div><span>Faturamento</span><b>${fmt(A.total)}</b></div>
@@ -1732,7 +1936,7 @@ async function relatorioFinal(eid){
         <div><div class="ass"></div><span>Responsável pelo evento</span></div>
         <div><div class="ass"></div><span>Tesouraria</span></div>
       </div>
-      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v1.7</p>
+      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v1.9</p>
     </section>`;
 
   const doc = capa + s1 + s2 + s3 + s4 + s6 + s8 + s9 + s10 + s11;
@@ -1899,17 +2103,27 @@ async function fechamentoGeral(eid){
 
 /* ---------- PRODUTOS / ESTOQUE (admin) ---------- */
 /* Filtro para o trabalho de cadastrar as fotos: mostra só o que ainda falta. */
-let FILTRO_SEM_FOTO = false;
+let FILTRO_SEM_FOTO = false, BUSCA_PROD = "";
 function toggleSemFoto(){ FILTRO_SEM_FOTO = !FILTRO_SEM_FOTO; renderProdutos(); }
-async function renderProdutos(){
+function buscarProduto(v){ BUSCA_PROD = v; renderProdutos(true); }
+/* Filtra por código ou nome. Um item aparece também quando o texto casa com
+   uma das suas cores (ex.: buscar EB-249.2 traz o produto principal). */
+function filtrarProdutos(lista){
+  const q = BUSCA_PROD.trim().toLowerCase();
+  if(!q) return lista;
+  const bate = p => String(p.code||"").toLowerCase().includes(q) || String(p.name||"").toLowerCase().includes(q);
+  return lista.filter(p => bate(p) || filhosDe(p.id).some(bate));
+}
+async function renderProdutos(digitando){
   const el=$("view-produtos");
   if(!EVENT){ el.innerHTML=`<div class="card mut">Crie um evento primeiro.</div>`; return; }
-  await loadCategories();
-  await loadProducts();
+  if(!digitando){ await loadCategories(); await loadProducts(); }
   const { data:exps } = await sb.from("ep_expenses").select("*").eq("event_id",EVENT.id).order("created_at",{ascending:false});
   window._EXPS = exps||[];
   const { data:adjs } = await sb.from("ep_stock_adjustments").select("*").eq("event_id",EVENT.id).order("created_at",{ascending:false}).limit(20);
   const pname = id => (PRODUCTS.find(p=>p.id===id)||{name:"?"}).name;
+  const _foco = document.activeElement && document.activeElement.id === "buscaProd";
+  const _pos = _foco ? document.activeElement.selectionStart : 0;
   el.innerHTML = `
     <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Produtos & Estoque</h2>
       <button class="btn small primary right" onclick="modalProduto()">+ Produto</button></div>
@@ -1922,7 +2136,11 @@ async function renderProdutos(){
       <button class="btn small" onclick="modalAjuste()">Perda / consumo / entrada</button>
       <button class="btn small" onclick="modalDespesa()">+ Compra / despesa</button>
     </div>
-    ${groupByCat(PRODUCTS.filter(p=>!p.parent_id).filter(p=>!FILTRO_SEM_FOTO || !p.image_url || filhosDe(p.id).some(f=>!f.image_url))).map(g=>`
+    <input id="buscaProd" placeholder="Buscar por código ou nome (ex.: AB-12, terço)" value="${esc(BUSCA_PROD)}"
+      oninput="buscarProduto(this.value)" style="margin-bottom:12px">
+    ${(()=>{ const vis = filtrarProdutos(PRODUCTS.filter(p=>!p.parent_id).filter(p=>!FILTRO_SEM_FOTO || !p.image_url || filhosDe(p.id).some(f=>!f.image_url)));
+      if(!vis.length) return `<div class="card mut">Nenhum produto encontrado${BUSCA_PROD?` para "${esc(BUSCA_PROD)}"`:""}.</div>`;
+      return groupByCat(vis).map(g=>`
       <div class="card tbl-wrap">
         <div class="row" style="margin-bottom:6px">
           <b style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--brand)">${esc(g.name||"Todos os produtos")}</b>
@@ -1946,7 +2164,7 @@ async function renderProdutos(){
           <td><button class="btn small" onclick="modalProduto('${p.id}')">Editar</button>
           <button class="btn small danger" onclick="delProduto('${p.id}','${esc(p.name)}')">Excluir</button></td></tr>`).join("")}
         </table>
-      </div>`).join("") || `<div class="card mut">Nenhum produto.</div>`}
+      </div>`).join(""); })()}
     <div class="card"><h3>Compras & despesas</h3>
       ${(exps||[]).map(e=>`<div class="row small" style="padding:5px 0;border-bottom:1px dashed var(--line)">
         <span>${fdt(e.created_at)} · <span class="tag">${e.kind}</span> ${esc(e.description)}</span>
@@ -1959,6 +2177,7 @@ async function renderProdutos(){
         <span>${fdt(a.created_at)} · <span class="tag">${a.kind}</span> ${esc(pname(a.product_id))} ${a.qty} un ${a.reason?("· "+esc(a.reason)):""}</span>
         <button class="btn small danger right" onclick="delAjuste('${a.id}')">✕</button></div>`).join("")||'<p class="mut small">Nenhum ajuste.</p>'}
     </div>`;
+  if(_foco){ const b = $("buscaProd"); if(b){ b.focus(); try{ b.setSelectionRange(_pos,_pos); }catch(e){} } }
 }
 window._EXPS = [];
 function editDespesa(id){
@@ -2393,8 +2612,52 @@ function filterVendas(){
     </div>
     <div class="mut small">${(s.ep_sale_items||[]).map(i=>`${i.qty}x ${esc(i.product_name)}`).join(", ")}
       · ${(s.ep_sale_payments||[]).map(p=>mlabel(p.method)).join(" + ")}
+      ${Number(s.discount)>0.004?` · <span style="color:var(--bad);font-weight:700">desconto ${fmt(s.discount)}</span>`:""}
       ${s.cancel_reason?` · motivo: ${esc(s.cancel_reason)}`:""}</div>
+    <button class="btn small ghost" style="margin-top:6px" onclick="modalResumoVenda('${s.id}')">Ver resumo</button>
   </div>`).join("") || `<div class="card mut">Nenhuma venda encontrada.</div>`;
+}
+/* Resumo de uma venda: o que saiu, quanto custou e quanto sobrou. */
+function modalResumoVenda(sid){
+  const s = (SALES_CACHE||[]).find(x=>x.id===sid); if(!s){ toast("Venda não encontrada"); return; }
+  const itens = s.ep_sale_items||[];
+  const custoDe = i => Number(i.unit_cost!=null ? i.unit_cost
+                        : (PRODUCTS.find(p=>p.id===i.product_id)||{}).cost || 0) * i.qty;
+  const custo = itens.reduce((a,i)=>a+custoDe(i),0);
+  const bruto = Number(s.gross!=null ? s.gross : s.total);
+  const desc  = Number(s.discount||0);
+  const total = Number(s.total);
+  const lucro = total - custo;
+  openModal(`<h2>Resumo da venda</h2>
+    <p class="mut small">#${s.id.slice(0,8)} · ${fdt(s.created_at)} · ${esc(window._pn(s.operator_id))}
+      ${s.status!=="ok"?` · <span class="tag bad">${esc(s.status)}</span>`:""}</p>
+    <div class="card" style="margin-bottom:10px">
+      ${itens.map(i=>{
+        const c = custoDe(i), sub = Number(i.subtotal), l = sub-c;
+        return `<div style="padding:7px 0;border-bottom:1px dashed var(--line)">
+          <div class="row small"><span>${i.qty}x ${esc(i.product_name)}
+            ${Number(i.discount)>0.004?`<span class="descflag">−${fmt(i.discount)}</span>`:""}</span>
+            <b class="right num">${fmt(sub)}</b></div>
+          <div class="row small mut"><span>custo ${fmt(c)}</span>
+            <b class="right num" style="color:${l<0?'var(--bad)':'var(--ok)'}">lucro ${fmt(l)}</b></div>
+        </div>`;
+      }).join("")}
+    </div>
+    <div class="card">
+      <div class="row small" style="padding:3px 0"><span>Valor cheio</span><b class="right num">${fmt(bruto)}</b></div>
+      ${desc>0.004?`<div class="row small" style="padding:3px 0"><span>Desconto ${(bruto?desc/bruto*100:0).toFixed(1).replace(".",",")}%
+        ${s.discount_note?`<span class="mut">(${esc(s.discount_note)})</span>`:""}</span>
+        <b class="right num" style="color:var(--bad)">−${fmt(desc)}</b></div>`:""}
+      <div class="row" style="padding:3px 0"><b>Total pago</b><b class="right num">${fmt(total)}</b></div>
+      <hr>
+      <div class="row small" style="padding:3px 0"><span>Custo das mercadorias</span><b class="right num">${fmt(custo)}</b></div>
+      <div class="row"><b>${lucro<0?"Prejuízo":"Lucro"}</b>
+        <b class="right num" style="font-size:18px;color:${lucro<0?'var(--bad)':'var(--ok)'}">${fmt(lucro)} · ${total>0?(lucro/total*100).toFixed(0):0}%</b></div>
+      <div class="row small mut" style="padding-top:6px"><span>Pagamento</span>
+        <span class="right">${(s.ep_sale_payments||[]).map(p=>`${mlabel(p.method)} ${fmt(p.amount)}`).join(" + ")}</span></div>
+    </div>
+    <div style="height:12px"></div>
+    <button class="btn block" onclick="closeModal()">Fechar</button>`);
 }
 async function delVenda(sid,status){
   if(!confirm("Excluir esta venda em definitivo? Não dá pra desfazer.")) return;
