@@ -339,7 +339,7 @@ svg text{font-family:inherit}
     </div>
     <div id="authMsg" class="small" style="color:var(--bad);margin-top:10px"></div>
   </div>
-  <div id="verFooter">Versão <b>2.5</b></div>
+  <div id="verFooter">Versão <b>2.7</b></div>
 </div>
 
 <!-- APP -->
@@ -799,6 +799,10 @@ function decCart(pid){ if(!CART[pid])return; CART[pid]--; if(CART[pid]<=0) delet
    sobre o total. Os dois podem coexistir: o geral incide sobre o que sobrou
    depois dos descontos por item. */
 let DESC_ITEM = {}, DESC_GERAL = 0;
+/* Kit: um preço fechado para o conjunto do carrinho. A diferença em relação à
+   soma dos itens é tratada como desconto e rateada entre eles ao gravar, para o
+   relatório por produto continuar correto. */
+let KIT = null;   // { nome, preco }
 
 const precoItem = (p,q) => Number(p.price)*q;
 function descontoItem(pid){ return Number(DESC_ITEM[pid]||0); }
@@ -814,11 +818,16 @@ function resumoCarrinho(){
   const bruto = linhas.reduce((s,l)=>s+l.bruto,0);
   const descItens = linhas.reduce((s,l)=>s+l.desc,0);
   const aposItens = bruto - descItens;
-  const descGeral = aposItens * (Number(DESC_GERAL)||0)/100;
-  const total = Math.max(0, aposItens - descGeral);
+  let descGeral = aposItens * (Number(DESC_GERAL)||0)/100;
+  let total = Math.max(0, aposItens - descGeral);
+  if(KIT && linhas.length){                    // preço fechado manda no total
+    total = Math.max(0, Number(KIT.preco)||0);
+    descGeral = Math.max(0, aposItens - total);
+  }
   const custo = linhas.reduce((s,l)=>s+l.custo,0);
   const descTotal = descItens + descGeral;
-  return { linhas, bruto, descItens, descGeral, descTotal, total, custo,
+  const fatorRateio = (bruto - descItens) > 0 ? total/(bruto - descItens) : 1;
+  return { linhas, bruto, descItens, descGeral, descTotal, total, custo, fatorRateio,
            lucro: total - custo,
            margem: total>0 ? (total-custo)/total*100 : 0,
            pctTotal: bruto>0 ? descTotal/bruto*100 : 0 };
@@ -865,6 +874,43 @@ function descontoPorValor(pid){
   if(v>base){ toast("O desconto não pode passar de "+fmt(base)); return; }
   setDesconto(pid, Math.round(v/base*10000)/100);
 }
+function modalKit(){
+  const R = resumoCarrinho();
+  if(!R.linhas.length){ toast("Monte o carrinho primeiro"); return; }
+  openModal(`<h2>${KIT?"Editar kit":"Montar kit"}</h2>
+    <p class="mut small">Junta os produtos do carrinho num preço fechado. A soma normal é
+      <b>${fmt(R.bruto)}</b>.</p>
+    <div class="card" style="margin:8px 0">
+      ${R.linhas.map(l=>`<div class="row small" style="padding:4px 0">
+        <span>${l.q}x ${esc(l.p.name)}</span><b class="right num">${fmt(l.bruto)}</b></div>`).join("")}
+    </div>
+    <label>Nome do kit (opcional)</label>
+    <input id="kitNome" value="${esc(KIT?KIT.nome:"")}" placeholder="ex.: Kit Namorados">
+    <label>Preço do kit</label>
+    <input id="kitPreco" inputmode="decimal" value="${KIT?Number(KIT.preco).toFixed(2).replace(".",","):R.bruto.toFixed(2).replace(".",",")}"
+      oninput="avisoKit(${R.bruto}, ${R.custo})">
+    <div id="kitAviso" class="mut small" style="margin:-4px 0 10px"></div>
+    <button class="btn primary block" onclick="salvarKit()">${KIT?"Atualizar preço do kit":"Aplicar preço do kit"}</button>
+    ${KIT?`<div style="height:8px"></div><button class="btn danger block" onclick="removerKit()">Desfazer kit</button>`:""}
+    <div style="height:8px"></div>
+    <button class="btn block" onclick="closeModal()">Cancelar</button>`);
+  avisoKit(R.bruto, R.custo);
+}
+function avisoKit(bruto, custo){
+  const el = $("kitAviso"); if(!el) return;
+  const p = N($("kitPreco").value), lucro = p - custo;
+  const dif = bruto - p;
+  el.innerHTML = `${dif>0.004?`Desconto de <b>${fmt(dif)}</b> (${(dif/bruto*100).toFixed(0)}%)`
+                  : dif<-0.004?`Acréscimo de <b>${fmt(-dif)}</b>`:"Mesmo valor da soma"} ·
+    custo ${fmt(custo)} · <b style="color:${lucro<0?'var(--bad)':'var(--ok)'}">lucro ${fmt(lucro)}</b>`;
+}
+function salvarKit(){
+  const p = N($("kitPreco").value);
+  if(p<=0){ toast("Informe o preço do kit"); return; }
+  KIT = { nome: ($("kitNome").value||"").trim() || "Kit", preco: p };
+  closeModal(); renderCart(); toast(`${KIT.nome}: ${fmt(p)}`);
+}
+function removerKit(){ KIT=null; closeModal(); renderCart(); toast("Kit desfeito"); }
 function limparDescontos(){ DESC_ITEM={}; DESC_GERAL=0; renderCart(); toast("Descontos removidos"); }
 
 /* O carrinho fica recolhido por padrão: no celular, a lista crescia e engolia a
@@ -884,7 +930,9 @@ function renderCart(){
         <span class="resumo">${items.length} ${items.length===1?"produto":"produtos"} · ${nItens} un</span>
         <span class="valor">${fmt(R.total)}</span>
       </button>
-      ${aberto?`<button class="btn small ghost" onclick="modalDesconto('')">% Desconto</button>`:""}
+      ${KIT?`<span class="descflag" style="background:var(--brand)">${esc(KIT.nome)}</span>`:""}
+      ${aberto?`<button class="btn small ghost" onclick="modalKit()">Kit</button>
+                <button class="btn small ghost" onclick="modalDesconto('')">% Desconto</button>`:""}
     </div>`:""}
     <div class="cartlist ${items.length>3?"rolando":""}" style="${aberto?"":"display:none"}">
     ${R.linhas.map(l=>`<div class="cartline">
@@ -899,7 +947,10 @@ function renderCart(){
 
     ${items.length&&aberto?`<div class="resumovenda">
       <div class="rv"><span>Subtotal</span><b class="num">${fmt(R.bruto)}</b></div>
-      ${temDesc?`<div class="rv desc"><span>Desconto ${R.pctTotal.toFixed(1).replace(".",",")}%
+      ${KIT?`<div class="rv"><span>Preço fechado · ${esc(KIT.nome)}</span>
+        <b class="num">${fmt(KIT.preco)}</b>
+        <button class="btn small ghost" onclick="modalKit()">editar</button></div>`:""}
+      ${temDesc?`<div class="rv desc"><span>${KIT?"Diferença para a soma":"Desconto"} ${R.pctTotal.toFixed(1).replace(".",",")}%
         ${R.descGeral>0.004&&R.descItens>0.004?`<span class="mut">(itens + geral)</span>`:""}</span>
         <b class="num">−${fmt(R.descTotal)}</b>
         <button class="btn small ghost" onclick="limparDescontos()">limpar</button></div>`:""}
@@ -981,7 +1032,7 @@ function modalQrPix(total){
     <button class="btn block" onclick="closeModal()">Voltar</button>
   </div>`);
 }
-function clearCart(){ CART={}; PAY=null; DESC_ITEM={}; DESC_GERAL=0; CART_ABERTO=false; renderCart(); }
+function clearCart(){ CART={}; PAY=null; DESC_ITEM={}; DESC_GERAL=0; KIT=null; CART_ABERTO=false; renderCart(); }
 function splitPay(){
   const total = cartTotal();
   openModal(`<h2>Dividir pagamento</h2><p class="mut small">Total: <b class="num">${fmt(total)}</b>. Informe o valor de cada forma (restante fica na última preenchida).</p>
@@ -1022,8 +1073,7 @@ async function saveSale(payments){
 async function _saveSale(payments){
   const R = resumoCarrinho();
   // o desconto geral é rateado entre os itens, para o relatório por produto ficar correto
-  const aposItens = R.bruto - R.descItens;
-  const fator = aposItens>0 ? (aposItens - R.descGeral)/aposItens : 1;
+  const fator = R.fatorRateio;
   const items = R.linhas.map(l=>({
     product_id: l.p.id, product_name: l.p.name, qty: l.q,
     unit_price: Number(l.p.price), unit_cost: Number(l.p.cost||0),
@@ -1031,13 +1081,14 @@ async function _saveSale(payments){
     discount: Math.round((l.bruto - l.liquido*fator)*100)/100
   }));
   const total = R.total;
-  const nota = [R.descItens>0.004?`itens: ${fmt(R.descItens)}`:null,
-                R.descGeral>0.004?`geral ${DESC_GERAL}%: ${fmt(R.descGeral)}`:null].filter(Boolean).join(" · ");
+  const nota = [KIT?`${KIT.nome} por ${fmt(KIT.preco)}`:null,
+                R.descItens>0.004?`itens: ${fmt(R.descItens)}`:null,
+                (!KIT && R.descGeral>0.004)?`geral ${DESC_GERAL}%: ${fmt(R.descGeral)}`:null].filter(Boolean).join(" · ");
   const sale = { offline_id: uid(), event_id:EVENT.id, register_id:REG.id, operator_id:ME.id,
     total, gross:R.bruto, discount:R.descTotal, discount_note: nota||null,
     custo:R.custo, items, payments, created_at:new Date().toISOString() };
   items.forEach(i=>{ const p=PRODUCTS.find(x=>x.id===i.product_id); if(p) p.stock-=i.qty; });
-  CART={}; PAY=null; DESC_ITEM={}; DESC_GERAL=0; CART_ABERTO=false; renderPDV();
+  CART={}; PAY=null; DESC_ITEM={}; DESC_GERAL=0; KIT=null; CART_ABERTO=false; renderPDV();
   if(!navigator.onLine){ queueSale(sale); toast("Venda salva OFFLINE — será sincronizada"); return; }
   const ok = await pushSale(sale);
   if(ok){ LAST_SALE=sale; toast("Venda concluída — "+fmt(total)); showReceiptOffer(sale); }
@@ -1818,7 +1869,7 @@ async function relatorioFinal(eid){
         <tr><td>Encerrado em</td><td>${ev.closed_at?fd(ev.closed_at):"—"}</td></tr>
         <tr><td>Emitido em</td><td>${fd(Date.now())}</td></tr>
         <tr><td>Responsável</td><td>${esc(ME.name)} — ${nivelNome(ME.role)}</td></tr>
-        <tr><td>Sistema</td><td>PDV do Encontro · versão 2.5</td></tr>
+        <tr><td>Sistema</td><td>PDV do Encontro · versão 2.7</td></tr>
       </table>
       <div class="resumocapa">
         <div><span>Faturamento</span><b>${fmt(A.total)}</b></div>
@@ -2038,7 +2089,7 @@ async function relatorioFinal(eid){
         <div><div class="ass"></div><span>Responsável pelo evento</span></div>
         <div><div class="ass"></div><span>Tesouraria</span></div>
       </div>
-      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v2.5</p>
+      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v2.7</p>
     </section>`;
 
   const doc = capa + s1 + s2 + s3 + s4 + s6 + s8 + s9 + s10 + s11;
@@ -2407,7 +2458,7 @@ async function salvarReserva(){
       p_delta:sobra, p_motivo:"Pagou a mais na reserva", p_sale:null });
     if(!r2.error) toast(`Crédito de ${fmt(sobra)} para ${nome}`);
   }
-  CART={}; PAY=null; DESC_ITEM={}; DESC_GERAL=0; CART_ABERTO=false;
+  CART={}; PAY=null; DESC_ITEM={}; DESC_GERAL=0; KIT=null; CART_ABERTO=false;
   closeModal(); toast(`Reserva de ${nome} registrada`);
   await loadProducts(); renderPDV();
 }
@@ -2486,10 +2537,17 @@ function editarReserva(id){
         <input id="edQtd${ix}" inputmode="numeric" value="${i.qty}" style="width:64px;margin:0;text-align:center"
           oninput="recalcReserva('${id}')">
       </div>`).join("")}
-      <div class="row" style="padding-top:8px"><b>Novo total</b>
-        <b class="right num" id="edTotal">${fmt(r.total)}</b></div>
+      <div class="row" style="padding-top:8px"><span class="mut small">Soma dos itens</span>
+        <b class="right num" id="edSoma">${fmt(r.total)}</b></div>
     </div>
-    <p class="mut small">Colocar quantidade 0 remove o item e devolve as unidades ao estoque.</p>
+    <label>Valor total da reserva</label>
+    <input id="edTotal" inputmode="decimal" value="${Number(r.total).toFixed(2).replace(".",",")}"
+      oninput="recalcReserva('${id}')">
+    <div id="edDif" class="mut small" style="margin:-4px 0 8px">
+    </div>
+    </div>
+    <p class="mut small">Quantidade 0 remove o item e devolve as unidades ao estoque.
+      O valor total pode ser alterado à mão — útil para kits e combinados.</p>
     <div style="height:12px"></div>
     <button class="btn primary block" onclick="salvarEdicaoReserva('${id}')">Salvar alterações</button>`);
 }
@@ -2501,8 +2559,16 @@ function itensEditados(r){
 }
 function recalcReserva(id){
   const r = RESERVAS.find(x=>x.id===id); if(!r) return;
-  const t = itensEditados(r).reduce((s,i)=>s+i.subtotal,0);
-  const el = $("edTotal"); if(el) el.textContent = fmt(t);
+  const soma = itensEditados(r).reduce((s,i)=>s+i.subtotal,0);
+  const el = $("edSoma"); if(el) el.textContent = fmt(soma);
+  const t = N($("edTotal").value);
+  const dif = $("edDif");
+  if(dif){
+    const d = soma - t;
+    dif.innerHTML = Math.abs(d)<0.005 ? "Igual à soma dos itens"
+      : d>0 ? `<b>${fmt(d)}</b> abaixo da soma (desconto/kit)`
+            : `<b>${fmt(-d)}</b> acima da soma`;
+  }
   const av = $("edAviso"); if(!av) return;
   const pago = N($("edValorPago").value);
   if(pago > t + 0.004){ av.innerHTML = `Pagou <b>${fmt(pago-t)}</b> a mais — vira crédito ao salvar.`; av.style.color="var(--ok)"; }
@@ -2515,7 +2581,9 @@ async function salvarEdicaoReserva(id){
   if(!nome){ toast("Informe o nome do cliente"); return; }
   const itens = itensEditados(r);
   if(!itens.length){ toast("A reserva precisa de pelo menos um item — para zerar tudo, cancele a reserva"); return; }
-  const total = itens.reduce((s,i)=>s+i.subtotal,0);
+  const soma = itens.reduce((s,i)=>s+i.subtotal,0);
+  const total = N($("edTotal").value) || soma;
+  if(total <= 0){ toast("Informe o valor total da reserva"); return; }
   let valorPago = N($("edValorPago").value);
   const sobra = Math.round((valorPago - total)*100)/100;
   if(sobra > 0.004) valorPago = total;   // o excedente sai da reserva e vira crédito
@@ -3108,8 +3176,125 @@ function filterVendas(){
       ${Number(s.discount)>0.004?` · <span style="color:var(--bad);font-weight:700">desconto ${fmt(s.discount)}</span>`:""}
       ${s.cancel_reason?` · motivo: ${esc(s.cancel_reason)}`:""}</div>
     <button class="btn small ghost" style="margin-top:6px" onclick="modalResumoVenda('${s.id}')">Ver resumo</button>
+    ${s.status==="ok"?`<button class="btn small ghost" style="margin-top:6px" onclick="editarVenda('${s.id}')">Editar</button>`:""}
   </div>`).join("") || `<div class="card mut">Nenhuma venda encontrada.</div>`;
 }
+/* ---------- EDITAR VENDA ----------
+   Para trocas ("levo este no lugar daquele e pago a diferença") e correções.
+   O estoque é reajustado pela diferença entre os itens antigos e os novos. */
+let VENDA_EDIT = null;
+
+function editarVenda(sid){
+  const s = (SALES_CACHE||[]).find(x=>x.id===sid);
+  if(!s){ toast("Venda não encontrada"); return; }
+  if(s.status!=="ok"){ toast("Só dá para editar venda ativa"); return; }
+  VENDA_EDIT = {
+    id: s.id,
+    itens: (s.ep_sale_items||[]).map(i=>({
+      product_id: i.product_id, product_name: i.product_name, qty: i.qty,
+      unit_price: Number(i.unit_price), unit_cost: Number(i.unit_cost||0)
+    })),
+    metodo: (s.ep_sale_payments||[])[0]?.method || "dinheiro",
+    totalManual: null
+  };
+  telaEditarVenda();
+}
+const somaEdit = () => VENDA_EDIT.itens.reduce((a,i)=>a+i.unit_price*i.qty, 0);
+const custoEdit = () => VENDA_EDIT.itens.reduce((a,i)=>a+(Number(i.unit_cost)||0)*i.qty, 0);
+const totalEdit = () => VENDA_EDIT.totalManual!=null ? VENDA_EDIT.totalManual : somaEdit();
+
+function telaEditarVenda(){
+  const V = VENDA_EDIT;
+  const total = totalEdit(), custo = custoEdit();
+  const taxa = taxaDe(V.metodo, total), lucro = total - custo - taxa;
+  const disp = PRODUCTS.filter(p=>p.active && !p.parent_id ? true : p.active)
+    .sort((a,b)=>String(a.code||"").localeCompare(String(b.code||""),"pt-BR",{numeric:true}));
+  openModal(`<h2>Editar venda</h2>
+    <p class="mut small">#${V.id.slice(0,8)} — ajuste as quantidades, troque produtos e confirme o pagamento.</p>
+    <div class="card" style="padding:8px 10px">
+      ${V.itens.map((i,ix)=>`<div class="row" style="padding:6px 0;border-bottom:1px dashed var(--line)">
+        <span style="flex:1;min-width:0">${esc(i.product_name)}<br>
+          <span class="mut small">${fmt(i.unit_price)} cada</span></span>
+        <button class="qbtn" onclick="qtdItemVenda(${ix},-1)">−</button>
+        <b class="num" style="min-width:22px;text-align:center">${i.qty}</b>
+        <button class="qbtn" onclick="qtdItemVenda(${ix},1)">+</button>
+        <b class="num" style="width:74px;text-align:right">${fmt(i.unit_price*i.qty)}</b>
+      </div>`).join("") || `<p class="mut small">Nenhum item — adicione ao menos um.</p>`}
+      <div class="row" style="padding-top:8px"><span class="mut small">Soma dos itens</span>
+        <b class="right num">${fmt(somaEdit())}</b></div>
+    </div>
+
+    <label>Adicionar produto</label>
+    <div class="row" style="gap:8px">
+      <select id="evProd" style="flex:1;margin:0">
+        ${disp.map(p=>`<option value="${p.id}">${p.code?esc(p.code)+" · ":""}${esc(p.name)} — ${fmt(p.price)}</option>`).join("")}
+      </select>
+      <button class="btn" onclick="addItemVenda()">+</button>
+    </div>
+
+    <label>Valor total cobrado</label>
+    <input id="evTotal" inputmode="decimal" value="${total.toFixed(2).replace(".",",")}" oninput="totalManualVenda()">
+    <div class="mut small" style="margin:-4px 0 8px">
+      ${Math.abs(somaEdit()-total)<0.005 ? "Igual à soma dos itens"
+        : somaEdit()>total ? `<b>${fmt(somaEdit()-total)}</b> de desconto`
+                           : `<b>${fmt(total-somaEdit())}</b> acima da soma`}
+    </div>
+
+    <label>Forma de pagamento</label>
+    <select id="evForma" onchange="VENDA_EDIT.metodo=this.value; telaEditarVenda()">
+      ${METHODS.map(([k,l])=>`<option value="${k}" ${V.metodo===k?"selected":""}>${l}</option>`).join("")}
+    </select>
+
+    <div class="calcbox">Custo ${fmt(custo)}${taxa>0.004?` · taxa ${fmt(taxa)}`:""} ·
+      <b style="color:${lucro<0?'var(--bad)':'var(--ok)'}">lucro ${fmt(lucro)}</b></div>
+
+    <label>Motivo da alteração</label>
+    <input id="evMotivo" placeholder="ex.: trocou o terço pela pulseira e pagou a diferença">
+    <div style="height:12px"></div>
+    <button class="btn primary block" onclick="salvarEdicaoVenda()">Salvar alterações</button>`);
+}
+function qtdItemVenda(ix, d){
+  const it = VENDA_EDIT.itens[ix]; if(!it) return;
+  it.qty += d;
+  if(it.qty<=0) VENDA_EDIT.itens.splice(ix,1);
+  VENDA_EDIT.totalManual = null;      // volta a acompanhar a soma
+  telaEditarVenda();
+}
+function addItemVenda(){
+  const p = PRODUCTS.find(x=>x.id === $("evProd").value); if(!p) return;
+  const ex = VENDA_EDIT.itens.find(i=>i.product_id===p.id);
+  if(ex) ex.qty++;
+  else VENDA_EDIT.itens.push({ product_id:p.id, product_name:p.name, qty:1,
+                               unit_price:Number(p.price), unit_cost:Number(p.cost||0) });
+  VENDA_EDIT.totalManual = null;
+  telaEditarVenda();
+}
+function totalManualVenda(){ VENDA_EDIT.totalManual = N($("evTotal").value); }
+
+async function salvarEdicaoVenda(){
+  const V = VENDA_EDIT;
+  if(!V.itens.length){ toast("A venda precisa de pelo menos um item"); return; }
+  const motivo = ($("evMotivo").value||"").trim();
+  if(!motivo){ toast("Descreva o motivo da alteração"); return; }
+  const soma = somaEdit(), total = N($("evTotal").value) || soma;
+  const fator = soma>0 ? total/soma : 1;
+  const itens = V.itens.map(i=>{
+    const bruto = i.unit_price*i.qty;
+    const sub = Math.round(bruto*fator*100)/100;
+    return { product_id:i.product_id, product_name:i.product_name, qty:i.qty,
+             unit_price:i.unit_price, unit_cost:i.unit_cost, subtotal:sub,
+             discount: Math.round((bruto-sub)*100)/100 };
+  });
+  const { error } = await sb.rpc("ep_editar_venda", { p_sale_id: V.id, p: {
+    items: itens, total, gross: soma, discount: Math.max(0, Math.round((soma-total)*100)/100),
+    payments: [{ method: $("evForma").value, amount: total }],
+    note: "editada: " + motivo }});
+  if(error){ toast("Não foi possível salvar: "+error.message); return; }
+  audit("venda_editada", { sale_id:V.id, total, motivo });
+  VENDA_EDIT = null; closeModal(); toast("Venda atualizada");
+  await loadProducts(); renderVendas();
+}
+
 /* Resumo de uma venda: o que saiu, quanto custou e quanto sobrou. */
 function modalResumoVenda(sid){
   const s = (SALES_CACHE||[]).find(x=>x.id===sid); if(!s){ toast("Venda não encontrada"); return; }
