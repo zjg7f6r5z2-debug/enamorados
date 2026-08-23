@@ -339,7 +339,7 @@ svg text{font-family:inherit}
     </div>
     <div id="authMsg" class="small" style="color:var(--bad);margin-top:10px"></div>
   </div>
-  <div id="verFooter">Versão <b>2.2</b></div>
+  <div id="verFooter">Versão <b>2.3</b></div>
 </div>
 
 <!-- APP -->
@@ -358,6 +358,7 @@ svg text{font-family:inherit}
     <div id="view-evento" class="view"></div>
     <div id="view-produtos" class="view"></div>
     <div id="view-vendas" class="view"></div>
+    <div id="view-reservas" class="view"></div>
     <div id="view-usuarios" class="view"></div>
     <div id="view-relatorios" class="view"></div>
     <div id="view-auditoria" class="view"></div>
@@ -514,7 +515,7 @@ function groupByCat(list){
 /* Cada aba exige um nível mínimo. */
 const TABS = [
   ["painel","Painel",3],["pdv","Vender",1],["caixa","Meu caixa",1],
-  ["produtos","Produtos",2],["vendas","Vendas",2],
+  ["reservas","Reservas",1],["produtos","Produtos",2],["vendas","Vendas",2],
   ["relatorios","Relatórios",3],["usuarios","Usuários",4],["auditoria","Auditoria",4]
 ];
 function buildNav(){
@@ -531,7 +532,7 @@ function go(v){
   $("cartBar").style.display = (v==="pdv" && REG) ? "block" : "none";
   agendaEspacoCarrinho();
   clearInterval(POLL);
-  const R = { pdv:renderPDV, caixa:renderCaixa, painel:renderPainel, evento:renderRelatorios, produtos:renderProdutos, vendas:renderVendas, usuarios:renderUsuarios, relatorios:renderRelatorios, auditoria:renderAuditoria };
+  const R = { pdv:renderPDV, caixa:renderCaixa, painel:renderPainel, evento:renderRelatorios, produtos:renderProdutos, vendas:renderVendas, reservas:renderReservas, usuarios:renderUsuarios, relatorios:renderRelatorios, auditoria:renderAuditoria };
   (R[v]||(()=>{}))();
   if(v==="painel") POLL = setInterval(atualizarPainel, 30000);
 }
@@ -925,6 +926,7 @@ function renderCart(){
         <div id="totalBig" class="num">${fmt(R.total)}</div></div>
       <button class="btn small ghost" onclick="clearCart()" ${items.length?'':'disabled'}>Limpar</button>
       <button class="btn small ghost" onclick="splitPay()" ${items.length?'':'disabled'}>Dividir pgto</button>
+      <button class="btn small ghost" onclick="modalReserva()" ${items.length?'':'disabled'}>Reservar</button>
       <button class="btn primary right" style="min-width:170px" onclick="concluirVenda()" ${items.length&&PAY&&!SALVANDO?'':'disabled'}>${SALVANDO?"GRAVANDO…":"CONCLUIR VENDA"}</button>
     </div>`;
   agendaEspacoCarrinho();
@@ -1061,6 +1063,8 @@ function iniciarRealtime(){
     .on("postgres_changes",{event:"*",schema:"public",table:"ep_sales",     filter:f}, ()=>agendarPainel())
     .on("postgres_changes",{event:"*",schema:"public",table:"ep_sangrias",  filter:f}, ()=>agendarPainel())
     .on("postgres_changes",{event:"*",schema:"public",table:"ep_registers", filter:f}, onCaixaRemoto)
+    .on("postgres_changes",{event:"*",schema:"public",table:"ep_reservations",filter:f}, ()=>{
+        if(viewAtual()==="reservas") renderReservas(); })
     .subscribe(st=>{ if(st==="CHANNEL_ERROR"||st==="TIMED_OUT"){ setTimeout(iniciarRealtime, 4000); } });
 }
 
@@ -1786,7 +1790,7 @@ async function relatorioFinal(eid){
         <tr><td>Encerrado em</td><td>${ev.closed_at?fd(ev.closed_at):"—"}</td></tr>
         <tr><td>Emitido em</td><td>${fd(Date.now())}</td></tr>
         <tr><td>Responsável</td><td>${esc(ME.name)} — ${nivelNome(ME.role)}</td></tr>
-        <tr><td>Sistema</td><td>PDV do Encontro · versão 2.2</td></tr>
+        <tr><td>Sistema</td><td>PDV do Encontro · versão 2.3</td></tr>
       </table>
       <div class="resumocapa">
         <div><span>Faturamento</span><b>${fmt(A.total)}</b></div>
@@ -2006,7 +2010,7 @@ async function relatorioFinal(eid){
         <div><div class="ass"></div><span>Responsável pelo evento</span></div>
         <div><div class="ass"></div><span>Tesouraria</span></div>
       </div>
-      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v2.2</p>
+      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v2.3</p>
     </section>`;
 
   const doc = capa + s1 + s2 + s3 + s4 + s6 + s8 + s9 + s10 + s11;
@@ -2171,6 +2175,172 @@ async function fechamentoGeral(eid){
       <button class="btn" onclick="expConsolidadoCSV('${eid}')">📊 Excel (CSV)</button>
     </div>`);
   audit("fechamento_geral",{event_id:eid});
+}
+
+/* ================= RESERVAS =================
+   Segura o produto para um cliente que vai pagar/retirar depois. O estoque é
+   baixado na hora da reserva, para dois operadores não venderem a mesma peça —
+   importante nos itens religiosos, que em geral têm 1 ou 2 unidades. */
+let RESERVAS = [], RES_FILTRO = "aberta";
+
+async function loadReservas(){
+  if(!EVENT) { RESERVAS = []; return; }
+  const { data } = await sb.from("ep_reservations").select("*")
+    .eq("event_id", EVENT.id).order("created_at",{ascending:false});
+  if(data) RESERVAS = data;
+}
+
+/* Abre a partir do carrinho: transforma o que está no carrinho numa reserva. */
+function modalReserva(){
+  const R = resumoCarrinho();
+  if(!R.linhas.length){ toast("Adicione produtos ao carrinho primeiro"); return; }
+  openModal(`<h2>Reservar produtos</h2>
+    <p class="mut small">${R.linhas.length} ${R.linhas.length===1?"produto":"produtos"} ·
+      <b>${fmt(R.total)}</b> — o estoque fica reservado para este cliente.</p>
+    <div class="card" style="margin:8px 0">
+      ${R.linhas.map(l=>`<div class="row small" style="padding:4px 0">
+        <span>${l.q}x ${esc(l.p.name)}</span><b class="right num">${fmt(l.liquido)}</b></div>`).join("")}
+    </div>
+    <label>Nome do cliente</label><input id="resNome" placeholder="Quem vai retirar">
+    <label>Telefone (opcional)</label><input id="resTel" inputmode="tel" placeholder="(00) 00000-0000">
+    <label>O cliente já pagou?</label>
+    <select id="resPago" onchange="document.getElementById('resFormaBox').style.display = this.value==='1'?'block':'none'">
+      <option value="0">Não — vai pagar na retirada</option>
+      <option value="1">Sim — já pagou agora</option>
+    </select>
+    <div id="resFormaBox" style="display:none">
+      <label>Forma de pagamento</label>
+      <select id="resForma">${METHODS.map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select>
+    </div>
+    <label>Observação (opcional)</label><input id="resObs" placeholder="ex.: retira à noite">
+    <div style="height:12px"></div>
+    <button class="btn primary block" onclick="salvarReserva()">Confirmar reserva</button>`);
+}
+
+async function salvarReserva(){
+  const nome = ($("resNome").value||"").trim();
+  if(!nome){ toast("Informe o nome do cliente"); return; }
+  const R = resumoCarrinho();
+  const pago = $("resPago").value === "1";
+  const itens = R.linhas.map(l=>({ product_id:l.p.id, product_name:l.p.name, qty:l.q,
+                                   unit_price:Number(l.p.price), subtotal:Math.round(l.liquido*100)/100 }));
+  const { error } = await sb.rpc("ep_reservar", { p: {
+    event_id: EVENT.id, operator_id: ME.id, register_id: REG ? REG.id : null,
+    customer_name: nome, customer_phone: ($("resTel").value||"").trim(),
+    items: itens, total: R.total, paid: pago,
+    paid_method: pago ? $("resForma").value : null,
+    notes: ($("resObs").value||"").trim()
+  }});
+  if(error){ toast("Não foi possível reservar: "+error.message); return; }
+  audit("reserva_criada", { cliente:nome, total:R.total, pago });
+  CART={}; PAY=null; DESC_ITEM={}; DESC_GERAL=0; CART_ABERTO=false;
+  closeModal(); toast(`Reserva de ${nome} registrada`);
+  await loadProducts(); renderPDV();
+}
+
+async function renderReservas(){
+  const el = $("view-reservas");
+  await loadReservas();
+  if(!window._rn){
+    const { data:profs } = await sb.from("ep_profiles").select("id,name");
+    const mapa = {}; (profs||[]).forEach(p=>mapa[p.id]=p.name);
+    window._rn = id => mapa[id] || "";
+  }
+  const lista = RESERVAS.filter(r => RES_FILTRO==="todas" ? true : r.status===RES_FILTRO);
+  const abertas = RESERVAS.filter(r=>r.status==="aberta");
+  const aReceber = abertas.filter(r=>!r.paid).reduce((s,r)=>s+Number(r.total),0);
+  const pagas = abertas.filter(r=>r.paid).reduce((s,r)=>s+Number(r.total),0);
+
+  el.innerHTML = `
+    <h2 style="margin-bottom:10px">Reservas</h2>
+    <div class="kpis" style="margin-bottom:12px">
+      <div class="kpi"><div class="v num">${abertas.length}</div><div class="l">Reservas abertas</div></div>
+      <div class="kpi"><div class="v num">${fmt(aReceber)}</div><div class="l">A receber na retirada</div></div>
+      <div class="kpi"><div class="v num">${fmt(pagas)}</div><div class="l">Pagas, aguardando retirada</div></div>
+    </div>
+    <div class="subnav">
+      ${[["aberta","Abertas"],["entregue","Entregues"],["cancelada","Canceladas"],["todas","Todas"]]
+        .map(([k,l])=>`<button class="subbtn ${RES_FILTRO===k?"on":""}" onclick="filtroReserva('${k}')">${l}
+          <span class="cnt">${k==="todas"?RESERVAS.length:RESERVAS.filter(r=>r.status===k).length}</span></button>`).join("")}
+    </div>
+    <p class="mut small" style="margin-bottom:10px">Para criar uma reserva: monte o carrinho na aba
+      <b>Vender</b> e toque em <b>Reservar</b>.</p>
+    ${lista.map(r=>{
+      const itens = (r.items||[]).map(i=>`${i.qty}x ${esc(i.product_name)}`).join(", ");
+      return `<div class="card">
+        <div class="row">
+          <b>${esc(r.customer_name)}</b>
+          ${r.paid ? `<span class="tag ok">PAGO${r.paid_method?" · "+mlabel(r.paid_method):""}</span>`
+                   : `<span class="tag bad">A PAGAR</span>`}
+          ${r.status!=="aberta"?`<span class="tag">${r.status}</span>`:""}
+          <b class="right num">${fmt(r.total)}</b>
+        </div>
+        <div class="mut small" style="margin-top:4px">${itens}</div>
+        <div class="mut small">${fdt(r.created_at)} · ${esc(window._rn ? window._rn(r.operator_id) : "")}
+          ${r.customer_phone?` · ${esc(r.customer_phone)}`:""}${r.notes?` · ${esc(r.notes)}`:""}</div>
+        ${r.status==="aberta"?`<div class="row" style="margin-top:8px;gap:6px">
+          ${!r.paid?`<button class="btn small" onclick="marcarPago('${r.id}')">Marcar como pago</button>`:""}
+          <button class="btn small primary" onclick="entregarReserva('${r.id}')">Entregar</button>
+          <button class="btn small danger right" onclick="cancelarReserva('${r.id}')">Cancelar</button>
+        </div>`:""}
+      </div>`;
+    }).join("") || `<div class="card mut">Nenhuma reserva ${RES_FILTRO==="todas"?"":RES_FILTRO}.</div>`}`;
+}
+function filtroReserva(k){ RES_FILTRO=k; renderReservas(); }
+
+async function marcarPago(id){
+  const r = RESERVAS.find(x=>x.id===id); if(!r) return;
+  openModal(`<h2>Registrar pagamento</h2>
+    <p class="mut small">${esc(r.customer_name)} · ${fmt(r.total)}</p>
+    <label>Forma de pagamento</label>
+    <select id="pgForma">${METHODS.map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select>
+    <p class="mut small">O pagamento fica anotado na reserva. A venda só entra no caixa quando você
+      tocar em <b>Entregar</b>.</p>
+    <div style="height:12px"></div>
+    <button class="btn primary block" onclick="confirmarPago('${id}')">Confirmar pagamento</button>`);
+}
+async function confirmarPago(id){
+  const forma = $("pgForma").value;
+  const { error } = await sb.from("ep_reservations")
+    .update({ paid:true, paid_method:forma, paid_at:new Date().toISOString() }).eq("id", id);
+  if(error){ toast(error.message); return; }
+  audit("reserva_paga", { id, forma });
+  closeModal(); toast("Pagamento registrado"); renderReservas();
+}
+
+async function entregarReserva(id){
+  const r = RESERVAS.find(x=>x.id===id); if(!r) return;
+  if(!REG){ toast("Abra seu caixa antes de entregar uma reserva"); return; }
+  openModal(`<h2>Entregar reserva</h2>
+    <p class="mut small">${esc(r.customer_name)} · ${fmt(r.total)}</p>
+    <div class="card" style="margin:8px 0">
+      ${(r.items||[]).map(i=>`<div class="row small" style="padding:4px 0">
+        <span>${i.qty}x ${esc(i.product_name)}</span><b class="right num">${fmt(i.subtotal)}</b></div>`).join("")}
+    </div>
+    ${r.paid?`<div class="alertline ok">Já pago em ${mlabel(r.paid_method)} — a venda será lançada nessa forma.</div>`
+            :`<label>Forma de pagamento</label>
+              <select id="entForma">${METHODS.map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select>`}
+    <p class="mut small">Ao entregar, a venda entra no seu caixa e a reserva é encerrada.</p>
+    <div style="height:12px"></div>
+    <button class="btn primary block" onclick="confirmarEntrega('${id}')">Confirmar entrega</button>`);
+}
+async function confirmarEntrega(id){
+  const r = RESERVAS.find(x=>x.id===id); if(!r) return;
+  const forma = r.paid ? (r.paid_method||"dinheiro") : $("entForma").value;
+  const { error } = await sb.rpc("ep_reserva_entregar", {
+    p_id: id, p_payments: [{ method: forma, amount: Number(r.total) }], p_register: REG.id });
+  if(error){ toast("Não foi possível entregar: "+error.message); return; }
+  audit("reserva_entregue", { id, forma, total:r.total });
+  closeModal(); toast("Entregue — venda registrada");
+  await loadProducts(); renderReservas();
+}
+async function cancelarReserva(id){
+  const r = RESERVAS.find(x=>x.id===id); if(!r) return;
+  if(!confirm(`Cancelar a reserva de ${r.customer_name}? Os produtos voltam ao estoque.`)) return;
+  const { error } = await sb.rpc("ep_reserva_cancelar", { p_id: id });
+  if(error){ toast(error.message); return; }
+  audit("reserva_cancelada", { id });
+  toast("Reserva cancelada"); await loadProducts(); renderReservas();
 }
 
 /* ---------- PRODUTOS / ESTOQUE (admin) ---------- */
