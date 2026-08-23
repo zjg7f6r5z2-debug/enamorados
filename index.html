@@ -339,7 +339,7 @@ svg text{font-family:inherit}
     </div>
     <div id="authMsg" class="small" style="color:var(--bad);margin-top:10px"></div>
   </div>
-  <div id="verFooter">Versão <b>2.8</b></div>
+  <div id="verFooter">Versão <b>2.9</b></div>
 </div>
 
 <!-- APP -->
@@ -1869,7 +1869,7 @@ async function relatorioFinal(eid){
         <tr><td>Encerrado em</td><td>${ev.closed_at?fd(ev.closed_at):"—"}</td></tr>
         <tr><td>Emitido em</td><td>${fd(Date.now())}</td></tr>
         <tr><td>Responsável</td><td>${esc(ME.name)} — ${nivelNome(ME.role)}</td></tr>
-        <tr><td>Sistema</td><td>PDV do Encontro · versão 2.8</td></tr>
+        <tr><td>Sistema</td><td>PDV do Encontro · versão 2.9</td></tr>
       </table>
       <div class="resumocapa">
         <div><span>Faturamento</span><b>${fmt(A.total)}</b></div>
@@ -2089,7 +2089,7 @@ async function relatorioFinal(eid){
         <div><div class="ass"></div><span>Responsável pelo evento</span></div>
         <div><div class="ass"></div><span>Tesouraria</span></div>
       </div>
-      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v2.8</p>
+      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v2.9</p>
     </section>`;
 
   const doc = capa + s1 + s2 + s3 + s4 + s6 + s8 + s9 + s10 + s11;
@@ -3208,8 +3208,7 @@ const somaPagto = () => VENDA_EDIT.pagamentos.reduce((a,p)=>a+(Number(p.amount)|
 
 function telaEditarVenda(){
   const V = VENDA_EDIT;
-  const total = totalEdit(), custo = custoEdit();
-  const taxa = taxaPgtos(V.pagamentos), lucro = total - custo - taxa;
+  const total = totalEdit();
   const disp = PRODUCTS.filter(p=>p.active && !p.parent_id ? true : p.active)
     .sort((a,b)=>String(a.code||"").localeCompare(String(b.code||""),"pt-BR",{numeric:true}));
   openModal(`<h2>Editar venda</h2>
@@ -3237,37 +3236,51 @@ function telaEditarVenda(){
 
     <label>Valor total cobrado</label>
     <input id="evTotal" inputmode="decimal" value="${total.toFixed(2).replace(".",",")}" oninput="totalManualVenda()">
-    <div class="mut small" style="margin:-4px 0 8px">
-      ${Math.abs(somaEdit()-total)<0.005 ? "Igual à soma dos itens"
-        : somaEdit()>total ? `<b>${fmt(somaEdit()-total)}</b> de desconto`
-                           : `<b>${fmt(total-somaEdit())}</b> acima da soma`}
-    </div>
+    <div id="evDif" class="mut small" style="margin:-4px 0 8px"></div>
 
     <label>Formas de pagamento</label>
     ${V.pagamentos.map((pg,ix)=>`<div class="row" style="gap:7px;margin-bottom:7px">
       <select style="flex:1;margin:0" onchange="mudarFormaPag(${ix}, this.value)">
         ${METHODS.map(([k,l])=>`<option value="${k}" ${pg.method===k?"selected":""}>${l}</option>`).join("")}
       </select>
-      <input inputmode="decimal" style="width:100px;margin:0;text-align:right"
-        value="${Number(pg.amount||0).toFixed(2).replace(".",",")}" oninput="mudarValorPag(${ix}, this.value)">
+      <input id="evPag${ix}" inputmode="decimal" style="width:100px;margin:0;text-align:right"
+        value="${Number(pg.amount||0).toFixed(2).replace(".",",")}"
+        oninput="mudarValorPag(${ix}, this.value)" onfocus="this.select()">
       ${V.pagamentos.length>1?`<button class="qbtn" onclick="removerPag(${ix})">✕</button>`:""}
     </div>`).join("")}
     <div class="row" style="gap:7px">
       <button class="btn small" onclick="addPag()">+ Outra forma</button>
       <button class="btn small ghost" onclick="ajustarPag()">Ajustar ao total</button>
-      <span class="right small" style="font-weight:800;color:${Math.abs(somaPagto()-total)<0.005?'var(--ok)':'var(--bad)'}">
-        ${Math.abs(somaPagto()-total)<0.005 ? "confere" :
-          somaPagto()<total ? `faltam ${fmt(total-somaPagto())}` : `sobra ${fmt(somaPagto()-total)}`}
-      </span>
+      <span id="evStatus" class="right small" style="font-weight:800"></span>
     </div>
 
-    <div class="calcbox">Custo ${fmt(custo)}${taxa>0.004?` · taxas ${fmt(taxa)}`:""} ·
-      <b style="color:${lucro<0?'var(--bad)':'var(--ok)'}">lucro ${fmt(lucro)}</b></div>
+    <div id="evCalc" class="calcbox"></div>
 
     <label>Motivo da alteração</label>
     <input id="evMotivo" placeholder="ex.: trocou o terço pela pulseira e pagou a diferença">
     <div style="height:12px"></div>
     <button class="btn primary block" onclick="salvarEdicaoVenda()">Salvar alterações</button>`);
+  atualizaResumoEdit();
+}
+/* Atualiza só os avisos, sem redesenhar o modal — se redesenhasse, o campo
+   perderia o foco a cada tecla digitada. */
+function atualizaResumoEdit(){
+  if(!VENDA_EDIT) return;
+  const total = totalEdit(), soma = somaEdit(), custo = custoEdit();
+  const taxa = taxaPgtos(VENDA_EDIT.pagamentos), lucro = total - custo - taxa;
+  const dif = $("evDif");
+  if(dif) dif.innerHTML = Math.abs(soma-total)<0.005 ? "Igual à soma dos itens"
+      : soma>total ? `<b>${fmt(soma-total)}</b> de desconto`
+                   : `<b>${fmt(total-soma)}</b> acima da soma`;
+  const st = $("evStatus");
+  if(st){
+    const p = somaPagto(), ok = Math.abs(p-total)<0.005;
+    st.textContent = ok ? "confere" : (p<total ? `faltam ${fmt(total-p)}` : `sobra ${fmt(p-total)}`);
+    st.style.color = ok ? "var(--ok)" : "var(--bad)";
+  }
+  const cx = $("evCalc");
+  if(cx) cx.innerHTML = `Custo ${fmt(custo)}${taxa>0.004?` · taxas ${fmt(taxa)}`:""} ·
+    <b style="color:${lucro<0?'var(--bad)':'var(--ok)'}">lucro ${fmt(lucro)}</b>`;
 }
 function qtdItemVenda(ix, d){
   const it = VENDA_EDIT.itens[ix]; if(!it) return;
@@ -3285,9 +3298,9 @@ function addItemVenda(){
   VENDA_EDIT.totalManual = null;
   telaEditarVenda();
 }
-function totalManualVenda(){ VENDA_EDIT.totalManual = N($("evTotal").value); telaEditarVenda(); }
-function mudarFormaPag(ix, m){ VENDA_EDIT.pagamentos[ix].method = m; telaEditarVenda(); }
-function mudarValorPag(ix, v){ VENDA_EDIT.pagamentos[ix].amount = N(v); telaEditarVenda(); }
+function totalManualVenda(){ VENDA_EDIT.totalManual = N($("evTotal").value); atualizaResumoEdit(); }
+function mudarFormaPag(ix, m){ VENDA_EDIT.pagamentos[ix].method = m; atualizaResumoEdit(); }
+function mudarValorPag(ix, v){ VENDA_EDIT.pagamentos[ix].amount = N(v); atualizaResumoEdit(); }
 function removerPag(ix){ VENDA_EDIT.pagamentos.splice(ix,1); telaEditarVenda(); }
 function addPag(){
   const falta = Math.max(0, Math.round((totalEdit() - somaPagto())*100)/100);
