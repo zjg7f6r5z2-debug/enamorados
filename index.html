@@ -339,7 +339,7 @@ svg text{font-family:inherit}
     </div>
     <div id="authMsg" class="small" style="color:var(--bad);margin-top:10px"></div>
   </div>
-  <div id="verFooter">Versão <b>2.4</b></div>
+  <div id="verFooter">Versão <b>2.5</b></div>
 </div>
 
 <!-- APP -->
@@ -1818,7 +1818,7 @@ async function relatorioFinal(eid){
         <tr><td>Encerrado em</td><td>${ev.closed_at?fd(ev.closed_at):"—"}</td></tr>
         <tr><td>Emitido em</td><td>${fd(Date.now())}</td></tr>
         <tr><td>Responsável</td><td>${esc(ME.name)} — ${nivelNome(ME.role)}</td></tr>
-        <tr><td>Sistema</td><td>PDV do Encontro · versão 2.4</td></tr>
+        <tr><td>Sistema</td><td>PDV do Encontro · versão 2.5</td></tr>
       </table>
       <div class="resumocapa">
         <div><span>Faturamento</span><b>${fmt(A.total)}</b></div>
@@ -2038,7 +2038,7 @@ async function relatorioFinal(eid){
         <div><div class="ass"></div><span>Responsável pelo evento</span></div>
         <div><div class="ass"></div><span>Tesouraria</span></div>
       </div>
-      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v2.4</p>
+      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v2.5</p>
     </section>`;
 
   const doc = capa + s1 + s2 + s3 + s4 + s6 + s8 + s9 + s10 + s11;
@@ -2348,35 +2348,65 @@ function modalReserva(){
     <label>Nome do cliente</label><input id="resNome" placeholder="Quem vai retirar">
     <label>Telefone (opcional)</label><input id="resTel" inputmode="tel" placeholder="(00) 00000-0000">
     <label>O cliente já pagou?</label>
-    <select id="resPago" onchange="document.getElementById('resFormaBox').style.display = this.value==='1'?'block':'none'">
+    <select id="resPago" onchange="ajustaPagoReserva(${R.total})">
       <option value="0">Não — vai pagar na retirada</option>
-      <option value="1">Sim — já pagou agora</option>
+      <option value="1">Sim — pagou tudo agora</option>
+      <option value="2">Pagou uma parte (sinal)</option>
     </select>
     <div id="resFormaBox" style="display:none">
+      <label>Valor pago agora</label>
+      <input id="resValorPago" inputmode="decimal" value="${R.total.toFixed(2).replace(".",",")}" oninput="avisoPagoReserva(${R.total})">
+      <div id="resAviso" class="mut small" style="margin:-4px 0 8px"></div>
       <label>Forma de pagamento</label>
-      <select id="resForma">${METHODS.map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select>
+      <select id="resForma">${METHODS.filter(([k])=>k!=="credito_loja").map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select>
     </div>
     <label>Observação (opcional)</label><input id="resObs" placeholder="ex.: retira à noite">
     <div style="height:12px"></div>
     <button class="btn primary block" onclick="salvarReserva()">Confirmar reserva</button>`);
 }
 
+function ajustaPagoReserva(total){
+  const v = $("resPago").value;
+  $("resFormaBox").style.display = v==="0" ? "none" : "block";
+  if(v==="1") $("resValorPago").value = total.toFixed(2).replace(".",",");
+  if(v==="2") $("resValorPago").value = "";
+  avisoPagoReserva(total);
+}
+function avisoPagoReserva(total){
+  const el = $("resAviso"); if(!el) return;
+  const pago = N($("resValorPago").value);
+  if(pago > total + 0.004){
+    el.innerHTML = `Pagou <b>${fmt(pago-total)}</b> a mais — a diferença vira crédito do cliente.`;
+    el.style.color = "var(--ok)";
+  } else if(pago < total - 0.004){
+    el.innerHTML = `Falta <b>${fmt(total-pago)}</b> para quitar — cobrar na retirada.`;
+    el.style.color = "var(--bad)";
+  } else { el.textContent = "Valor exato da reserva."; el.style.color = "var(--mut)"; }
+}
 async function salvarReserva(){
   const nome = ($("resNome").value||"").trim();
   if(!nome){ toast("Informe o nome do cliente"); return; }
   const R = resumoCarrinho();
-  const pago = $("resPago").value === "1";
+  const modo = $("resPago").value;
+  const valorPago = modo === "0" ? 0 : N($("resValorPago").value);
+  const pago = valorPago >= R.total - 0.004;
   const itens = R.linhas.map(l=>({ product_id:l.p.id, product_name:l.p.name, qty:l.q,
                                    unit_price:Number(l.p.price), subtotal:Math.round(l.liquido*100)/100 }));
   const { error } = await sb.rpc("ep_reservar", { p: {
     event_id: EVENT.id, operator_id: ME.id, register_id: REG ? REG.id : null,
     customer_name: nome, customer_phone: ($("resTel").value||"").trim(),
-    items: itens, total: R.total, paid: pago,
-    paid_method: pago ? $("resForma").value : null,
+    items: itens, total: R.total, paid: pago, paid_amount: valorPago,
+    paid_method: valorPago>0 ? $("resForma").value : null,
     notes: ($("resObs").value||"").trim()
   }});
   if(error){ toast("Não foi possível reservar: "+error.message); return; }
-  audit("reserva_criada", { cliente:nome, total:R.total, pago });
+  audit("reserva_criada", { cliente:nome, total:R.total, pago:valorPago });
+  if(valorPago > R.total + 0.004){
+    const sobra = Math.round((valorPago - R.total)*100)/100;
+    const r2 = await sb.rpc("ep_credito_mov", { p_event:EVENT.id, p_nome:nome, p_fone:null,
+      p_delta:sobra, p_motivo:"Pagou a mais na reserva", p_sale:null });
+    if(!r2.error) toast(`Crédito de ${fmt(sobra)} para ${nome}`);
+  }
   CART={}; PAY=null; DESC_ITEM={}; DESC_GERAL=0; CART_ABERTO=false;
   closeModal(); toast(`Reserva de ${nome} registrada`);
   await loadProducts(); renderPDV();
@@ -2392,15 +2422,15 @@ async function renderReservas(){
   }
   const lista = RESERVAS.filter(r => RES_FILTRO==="todas" ? true : r.status===RES_FILTRO);
   const abertas = RESERVAS.filter(r=>r.status==="aberta");
-  const aReceber = abertas.filter(r=>!r.paid).reduce((s,r)=>s+Number(r.total),0);
-  const pagas = abertas.filter(r=>r.paid).reduce((s,r)=>s+Number(r.total),0);
+  const aReceber = abertas.reduce((s,r)=>s+Math.max(0, Number(r.total)-Number(r.paid_amount||0)), 0);
+  const pagas = abertas.reduce((s,r)=>s+Math.min(Number(r.paid_amount||0), Number(r.total)), 0);
 
   el.innerHTML = `
     <h2 style="margin-bottom:10px">Reservas</h2>
     <div class="kpis" style="margin-bottom:12px">
       <div class="kpi"><div class="v num">${abertas.length}</div><div class="l">Reservas abertas</div></div>
       <div class="kpi"><div class="v num">${fmt(aReceber)}</div><div class="l">A receber na retirada</div></div>
-      <div class="kpi"><div class="v num">${fmt(pagas)}</div><div class="l">Pagas, aguardando retirada</div></div>
+      <div class="kpi"><div class="v num">${fmt(pagas)}</div><div class="l">Já recebido em reservas</div></div>
     </div>
     <div class="subnav">
       ${[["aberta","Abertas"],["entregue","Entregues"],["cancelada","Canceladas"],["todas","Todas"]]
@@ -2414,8 +2444,10 @@ async function renderReservas(){
       return `<div class="card">
         <div class="row">
           <b>${esc(r.customer_name)}</b>
-          ${r.paid ? `<span class="tag ok">PAGO${r.paid_method?" · "+mlabel(r.paid_method):""}</span>`
-                   : `<span class="tag bad">A PAGAR</span>`}
+          ${(()=>{ const pg=Number(r.paid_amount||0), tt=Number(r.total), falta=tt-pg;
+            if(pg<=0.004) return `<span class="tag bad">A PAGAR</span>`;
+            if(falta>0.004) return `<span class="tag amber">PARCIAL · falta ${fmt(falta)}</span>`;
+            return `<span class="tag ok">PAGO${r.paid_method?" · "+mlabel(r.paid_method):""}</span>`; })()}
           ${r.status!=="aberta"?`<span class="tag">${r.status}</span>`:""}
           <b class="right num">${fmt(r.total)}</b>
         </div>
@@ -2441,15 +2473,12 @@ function editarReserva(id){
     <label>Nome do cliente</label><input id="edNome" value="${esc(r.customer_name)}">
     <label>Telefone</label><input id="edFone" inputmode="tel" value="${esc(r.customer_phone||"")}">
     <label>Observação</label><input id="edObs" value="${esc(r.notes||"")}">
-    <label>Situação do pagamento</label>
-    <select id="edPago" onchange="document.getElementById('edFormaBox').style.display=this.value==='1'?'block':'none'">
-      <option value="0" ${r.paid?"":"selected"}>A pagar na retirada</option>
-      <option value="1" ${r.paid?"selected":""}>Já pago</option>
-    </select>
-    <div id="edFormaBox" style="display:${r.paid?"block":"none"}">
-      <label>Forma de pagamento</label>
-      <select id="edForma">${METHODS.map(([k,l])=>`<option value="${k}" ${r.paid_method===k?"selected":""}>${l}</option>`).join("")}</select>
-    </div>
+    <label>Valor já pago</label>
+    <input id="edValorPago" inputmode="decimal" value="${Number(r.paid_amount||0).toFixed(2).replace(".",",")}"
+      oninput="recalcReserva('${id}')">
+    <div id="edAviso" class="mut small" style="margin:-4px 0 8px"></div>
+    <label>Forma de pagamento</label>
+    <select id="edForma">${METHODS.filter(([k])=>k!=="credito_loja").map(([k,l])=>`<option value="${k}" ${r.paid_method===k?"selected":""}>${l}</option>`).join("")}</select>
     <label>Itens reservados</label>
     <div class="card" style="padding:8px 10px">
       ${(r.items||[]).map((i,ix)=>`<div class="row" style="padding:5px 0;border-bottom:1px dashed var(--line)">
@@ -2474,6 +2503,11 @@ function recalcReserva(id){
   const r = RESERVAS.find(x=>x.id===id); if(!r) return;
   const t = itensEditados(r).reduce((s,i)=>s+i.subtotal,0);
   const el = $("edTotal"); if(el) el.textContent = fmt(t);
+  const av = $("edAviso"); if(!av) return;
+  const pago = N($("edValorPago").value);
+  if(pago > t + 0.004){ av.innerHTML = `Pagou <b>${fmt(pago-t)}</b> a mais — vira crédito ao salvar.`; av.style.color="var(--ok)"; }
+  else if(pago < t - 0.004){ av.innerHTML = `Falta <b>${fmt(t-pago)}</b> — cobrar na retirada.`; av.style.color="var(--bad)"; }
+  else { av.textContent = "Reserva quitada."; av.style.color="var(--mut)"; }
 }
 async function salvarEdicaoReserva(id){
   const r = RESERVAS.find(x=>x.id===id); if(!r) return;
@@ -2481,14 +2515,21 @@ async function salvarEdicaoReserva(id){
   if(!nome){ toast("Informe o nome do cliente"); return; }
   const itens = itensEditados(r);
   if(!itens.length){ toast("A reserva precisa de pelo menos um item — para zerar tudo, cancele a reserva"); return; }
-  const pago = $("edPago").value === "1";
   const total = itens.reduce((s,i)=>s+i.subtotal,0);
+  let valorPago = N($("edValorPago").value);
+  const sobra = Math.round((valorPago - total)*100)/100;
+  if(sobra > 0.004) valorPago = total;   // o excedente sai da reserva e vira crédito
   const { error } = await sb.rpc("ep_reserva_editar", { p_id:id, p: {
     customer_name:nome, customer_phone:($("edFone").value||"").trim(),
     notes:($("edObs").value||"").trim(), items:itens, total,
-    paid:pago, paid_method: pago ? $("edForma").value : null }});
+    paid_amount: valorPago, paid_method: valorPago>0 ? $("edForma").value : null }});
   if(error){ toast("Não foi possível salvar: "+error.message); return; }
-  audit("reserva_editada",{id, total, pago});
+  if(sobra > 0.004){
+    const r2 = await sb.rpc("ep_credito_mov", { p_event:EVENT.id, p_nome:nome, p_fone:null,
+      p_delta:sobra, p_motivo:"Pagou a mais na reserva", p_sale:null });
+    if(!r2.error) toast(`Crédito de ${fmt(sobra)} para ${nome}`);
+  }
+  audit("reserva_editada",{id, total, pago:valorPago});
   closeModal(); toast("Reserva atualizada");
   await loadProducts(); renderReservas();
 }
@@ -2521,20 +2562,26 @@ async function entregarReserva(id){
       ${(r.items||[]).map(i=>`<div class="row small" style="padding:4px 0">
         <span>${i.qty}x ${esc(i.product_name)}</span><b class="right num">${fmt(i.subtotal)}</b></div>`).join("")}
     </div>
-    ${r.paid?`<div class="alertline ok">Já pago em ${mlabel(r.paid_method)} — a venda será lançada nessa forma.</div>`
-            :`<label>Forma de pagamento</label>
-              <select id="entForma">${METHODS.map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select>`}
+    ${(()=>{ const pg=Number(r.paid_amount||0), falta=Number(r.total)-pg;
+      if(falta <= 0.004) return `<div class="alertline ok">Já pago ${fmt(pg)} em ${mlabel(r.paid_method)} — nada a cobrar.</div>`;
+      return `<div class="alertline amber">Já pago: <b>${fmt(pg)}</b> · <b>falta ${fmt(falta)}</b></div>
+        <label>Forma de pagamento do restante</label>
+        <select id="entForma">${METHODS.map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select>`; })()}
     <p class="mut small">Ao entregar, a venda entra no seu caixa e a reserva é encerrada.</p>
     <div style="height:12px"></div>
     <button class="btn primary block" onclick="confirmarEntrega('${id}')">Confirmar entrega</button>`);
 }
 async function confirmarEntrega(id){
   const r = RESERVAS.find(x=>x.id===id); if(!r) return;
-  const forma = r.paid ? (r.paid_method||"dinheiro") : $("entForma").value;
+  const pg = Number(r.paid_amount||0), total = Number(r.total), falta = Math.round((total-pg)*100)/100;
+  const pagamentos = [];
+  if(pg > 0.004) pagamentos.push({ method: r.paid_method||"dinheiro", amount: Math.min(pg,total) });
+  if(falta > 0.004) pagamentos.push({ method: $("entForma").value, amount: falta });
+  if(!pagamentos.length) pagamentos.push({ method: r.paid_method||"dinheiro", amount: total });
   const { error } = await sb.rpc("ep_reserva_entregar", {
-    p_id: id, p_payments: [{ method: forma, amount: Number(r.total) }], p_register: REG.id });
+    p_id: id, p_payments: pagamentos, p_register: REG.id });
   if(error){ toast("Não foi possível entregar: "+error.message); return; }
-  audit("reserva_entregue", { id, forma, total:r.total });
+  audit("reserva_entregue", { id, total:r.total, pagamentos });
   closeModal(); toast("Entregue — venda registrada");
   await loadProducts(); renderReservas();
 }
