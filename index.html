@@ -339,7 +339,7 @@ svg text{font-family:inherit}
     </div>
     <div id="authMsg" class="small" style="color:var(--bad);margin-top:10px"></div>
   </div>
-  <div id="verFooter">Versão <b>2.9</b></div>
+  <div id="verFooter">Versão <b>3.0</b></div>
 </div>
 
 <!-- APP -->
@@ -1869,7 +1869,7 @@ async function relatorioFinal(eid){
         <tr><td>Encerrado em</td><td>${ev.closed_at?fd(ev.closed_at):"—"}</td></tr>
         <tr><td>Emitido em</td><td>${fd(Date.now())}</td></tr>
         <tr><td>Responsável</td><td>${esc(ME.name)} — ${nivelNome(ME.role)}</td></tr>
-        <tr><td>Sistema</td><td>PDV do Encontro · versão 2.9</td></tr>
+        <tr><td>Sistema</td><td>PDV do Encontro · versão 3.0</td></tr>
       </table>
       <div class="resumocapa">
         <div><span>Faturamento</span><b>${fmt(A.total)}</b></div>
@@ -2089,7 +2089,7 @@ async function relatorioFinal(eid){
         <div><div class="ass"></div><span>Responsável pelo evento</span></div>
         <div><div class="ass"></div><span>Tesouraria</span></div>
       </div>
-      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v2.9</p>
+      <p class="rodape">${esc(ev.name)} · Relatório final emitido em ${fd(Date.now())} por ${esc(ME.name)} · PDV do Encontro v3.0</p>
     </section>`;
 
   const doc = capa + s1 + s2 + s3 + s4 + s6 + s8 + s9 + s10 + s11;
@@ -3197,7 +3197,10 @@ function editarVenda(sid){
     pagamentos: (s.ep_sale_payments||[]).length
         ? (s.ep_sale_payments||[]).map(p=>({ method:p.method, amount:Number(p.amount) }))
         : [{ method:"dinheiro", amount:Number(s.total) }],
-    totalManual: null
+    totalManual: null,
+    recebido: null,
+    cliente: "",
+    quando: s.created_at
   };
   telaEditarVenda();
 }
@@ -3214,16 +3217,22 @@ function telaEditarVenda(){
   openModal(`<h2>Editar venda</h2>
     <p class="mut small">#${V.id.slice(0,8)} — ajuste as quantidades, troque produtos e confirme o pagamento.</p>
     <div class="card" style="padding:8px 10px">
-      ${V.itens.map((i,ix)=>`<div class="row" style="padding:6px 0;border-bottom:1px dashed var(--line)">
-        <span style="flex:1;min-width:0">${esc(i.product_name)}<br>
-          <span class="mut small">${fmt(i.unit_price)} cada</span></span>
-        <button class="qbtn" onclick="qtdItemVenda(${ix},-1)">−</button>
-        <b class="num" style="min-width:22px;text-align:center">${i.qty}</b>
-        <button class="qbtn" onclick="qtdItemVenda(${ix},1)">+</button>
-        <b class="num" style="width:74px;text-align:right">${fmt(i.unit_price*i.qty)}</b>
+      ${V.itens.map((i,ix)=>`<div style="padding:7px 0;border-bottom:1px dashed var(--line)">
+        <div class="row"><span style="flex:1;min-width:0;font-weight:700">${esc(i.product_name)}</span>
+          <button class="qbtn" onclick="qtdItemVenda(${ix},-1)">−</button>
+          <b class="num" style="min-width:22px;text-align:center">${i.qty}</b>
+          <button class="qbtn" onclick="qtdItemVenda(${ix},1)">+</button>
+          <b class="num" id="evSub${ix}" style="width:74px;text-align:right">${fmt(i.unit_price*i.qty)}</b>
+        </div>
+        <div class="row small mut" style="margin-top:3px">
+          <span>preço unitário</span>
+          <input inputmode="decimal" style="width:86px;margin:0 0 0 8px;padding:5px 7px;text-align:right"
+            value="${Number(i.unit_price).toFixed(2).replace(".",",")}" oninput="mudarPrecoItem(${ix}, this.value)">
+          <span class="right">custo ${fmt(i.unit_cost)}</span>
+        </div>
       </div>`).join("") || `<p class="mut small">Nenhum item — adicione ao menos um.</p>`}
       <div class="row" style="padding-top:8px"><span class="mut small">Soma dos itens</span>
-        <b class="right num">${fmt(somaEdit())}</b></div>
+        <b class="right num" id="evSoma">${fmt(somaEdit())}</b></div>
     </div>
 
     <label>Adicionar produto</label>
@@ -3256,6 +3265,19 @@ function telaEditarVenda(){
 
     <div id="evCalc" class="calcbox"></div>
 
+    <label>Valor recebido do cliente (opcional)</label>
+    <input id="evRecebido" inputmode="decimal" placeholder="deixe vazio se recebeu o valor exato"
+      value="${V.recebido!=null?Number(V.recebido).toFixed(2).replace(".",","):""}" oninput="mudarRecebido(this.value)">
+    <div id="evTroco" class="mut small" style="margin:-4px 0 8px">${trocoTxt()}</div>
+    <div id="evClienteBox" style="display:${(V.recebido||0) > totalEdit()+0.004 ? "block":"none"}">
+      <label>Nome do cliente (para lançar o crédito)</label>
+      <input id="evCliente" value="${esc(V.cliente||"")}" placeholder="quem ficou com o crédito"
+        oninput="VENDA_EDIT.cliente=this.value">
+    </div>
+
+    ${podeVer(2)?`<label>Data e hora da venda</label>
+    <input id="evQuando" type="datetime-local" value="${dtLocal(V.quando)}">`:""}
+
     <label>Motivo da alteração</label>
     <input id="evMotivo" placeholder="ex.: trocou o terço pela pulseira e pagou a diferença">
     <div style="height:12px"></div>
@@ -3281,6 +3303,9 @@ function atualizaResumoEdit(){
   const cx = $("evCalc");
   if(cx) cx.innerHTML = `Custo ${fmt(custo)}${taxa>0.004?` · taxas ${fmt(taxa)}`:""} ·
     <b style="color:${lucro<0?'var(--bad)':'var(--ok)'}">lucro ${fmt(lucro)}</b>`;
+  const tr = $("evTroco"); if(tr) tr.innerHTML = trocoTxt();
+  const cb = $("evClienteBox");
+  if(cb) cb.style.display = (VENDA_EDIT.recebido||0) > total + 0.004 ? "block" : "none";
 }
 function qtdItemVenda(ix, d){
   const it = VENDA_EDIT.itens[ix]; if(!it) return;
@@ -3297,6 +3322,33 @@ function addItemVenda(){
                                unit_price:Number(p.price), unit_cost:Number(p.cost||0) });
   VENDA_EDIT.totalManual = null;
   telaEditarVenda();
+}
+function dtLocal(iso){
+  const d = new Date(iso); const p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function trocoTxt(){
+  const r = VENDA_EDIT.recebido, t = totalEdit();
+  if(r==null || r<=0) return "Sem troco a registrar.";
+  const dif = Math.round((r-t)*100)/100;
+  if(dif > 0.004) return `<b style="color:var(--ok)">Troco de ${fmt(dif)}</b> — se o cliente não levar, vira crédito no nome dele.`;
+  if(dif < -0.004) return `<b style="color:var(--bad)">Faltam ${fmt(-dif)}</b> para fechar o total.`;
+  return "Valor exato.";
+}
+function mudarPrecoItem(ix, v){
+  const it = VENDA_EDIT.itens[ix]; if(!it) return;
+  it.unit_price = N(v);
+  VENDA_EDIT.totalManual = null;
+  const sub = $("evSub"+ix); if(sub) sub.textContent = fmt(it.unit_price*it.qty);
+  const soma = $("evSoma"); if(soma) soma.textContent = fmt(somaEdit());
+  const tot = $("evTotal"); if(tot) tot.value = somaEdit().toFixed(2).replace(".",",");
+  atualizaResumoEdit();
+}
+function mudarRecebido(v){
+  VENDA_EDIT.recebido = v.trim()==="" ? null : N(v);
+  const cx = $("evClienteBox");
+  if(cx) cx.style.display = (VENDA_EDIT.recebido||0) > totalEdit()+0.004 ? "block" : "none";
+  atualizaResumoEdit();
 }
 function totalManualVenda(){ VENDA_EDIT.totalManual = N($("evTotal").value); atualizaResumoEdit(); }
 function mudarFormaPag(ix, m){ VENDA_EDIT.pagamentos[ix].method = m; atualizaResumoEdit(); }
@@ -3338,12 +3390,29 @@ async function salvarEdicaoVenda(){
   if(Math.abs(somaP-total) > 0.02){
     toast(`As formas somam ${fmt(somaP)} e o total é ${fmt(total)} — use "Ajustar ao total"`); return;
   }
-  const { error } = await sb.rpc("ep_editar_venda", { p_sale_id: V.id, p: {
+  const corpo = {
     items: itens, total, gross: soma, discount: Math.max(0, Math.round((soma-total)*100)/100),
     payments: pagos.map(p=>({ method:p.method, amount:Number(p.amount) })),
-    note: "editada: " + motivo }});
+    note: "editada: " + motivo };
+  const qd = $("evQuando");
+  if(qd && qd.value){
+    const nova = new Date(qd.value);
+    if(!isNaN(nova) && Math.abs(nova - new Date(V.quando)) > 60000) corpo.created_at = nova.toISOString();
+  }
+  const { error } = await sb.rpc("ep_editar_venda", { p_sale_id: V.id, p: corpo });
   if(error){ toast("Não foi possível salvar: "+error.message); return; }
   audit("venda_editada", { sale_id:V.id, total, motivo });
+  const sobra = V.recebido!=null ? Math.round((V.recebido-total)*100)/100 : 0;
+  if(sobra > 0.004){
+    const nome = (V.cliente||"").trim();
+    if(!nome){ toast("Venda salva. Informe o nome para lançar o crédito do troco."); }
+    else {
+      const r2 = await sb.rpc("ep_credito_mov", { p_event:EVENT.id, p_nome:nome, p_fone:null,
+        p_delta:sobra, p_motivo:"Troco não devolvido (venda editada)", p_sale:V.id });
+      if(r2.error) toast("Venda salva, mas o crédito falhou: "+r2.error.message);
+      else toast(`Crédito de ${fmt(sobra)} para ${nome}`);
+    }
+  }
   VENDA_EDIT = null; closeModal(); toast("Venda atualizada");
   await loadProducts(); renderVendas();
 }
